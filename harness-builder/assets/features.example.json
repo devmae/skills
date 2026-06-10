@@ -1,0 +1,14 @@
+{
+  "project": "<PROJECT_NAME>",
+  "updated": "<ISO_DATE>",
+  "features": [
+    {
+      "id": "F001",
+      "description": "사용자가 이메일 + 비밀번호로 로그인할 수 있다",
+      "verify": "npm run test:e2e -- auth.spec.ts (로그인 플로우 통과)",
+      "priority": 1,
+      "status": "fail",
+      "notes": ""
+    }
+  ]
+}

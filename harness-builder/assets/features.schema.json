@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Harness Feature List",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "string"
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "description",
+          "verify",
+          "priority",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "verify": {
+            "type": "string",
+            "description": "동작을 증명하는 정확한 명령 또는 절차"
+          },
+          "priority": {
+            "type": "integer",
+            "description": "낮을수록 우선순위 높음"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "project",
+    "features"
+  ]
+}
