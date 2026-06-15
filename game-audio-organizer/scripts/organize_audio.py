@@ -200,7 +200,7 @@ def main():
         return
 
     seen = load_seen(manifest)
-    files = sorted(p for p in src.iterdir()
+    files = sorted(p for p in src.rglob("*")
                    if p.is_file() and p.suffix.lower() in AUDIO_EXTS)
 
     plan, rows, batch_hashes = [], [], {}
@@ -212,12 +212,9 @@ def main():
         dup = batch_hashes.get(h)
         batch_hashes.setdefault(h, p.name)
 
-        dom, cat, catid, conf = classify_filename(p.name)
-        method = "filename"
-        if dom is None or conf < THRESHOLD:           # filename miss -> Phase 2
-            adom, acat, acatid, aconf = classify_audio(p)
-            if acat and aconf >= THRESHOLD:
-                dom, cat, catid, conf, method = adom, acat, acatid, aconf, "clap"
+        # Bypass filename-based classification and run CLAP audio content analysis exclusively
+        dom, cat, catid, conf = classify_audio(p)
+        method = "clap"
 
         creator, sid, desc = parse_source(p.name)
         if dup:
@@ -227,7 +224,8 @@ def main():
             domain, category, label = dom, cat, f"{dom}/{cat}"
             newname = f"{catid}_{titlecase(desc)}_{titlecase(creator)}_{sid or 'na'}{p.suffix.lower()}"
         else:
-            tgt_dir, domain, category, label, newname = review, "", "UNCATEGORIZED", "UNCATEGORIZED", p.name
+            tgt_dir = dst / "SFX" / "UNCATEGORIZED"
+            domain, category, label, newname = "SFX", "UNCATEGORIZED", "SFX/UNCATEGORIZED", p.name
 
         target = tgt_dir / newname
         plan.append((p, target, label, method, conf))
