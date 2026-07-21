@@ -1,0 +1,4 @@
+interface:
+  display_name: "부가가치세 신고"
+  short_description: "모바일 게임 개인사업자의 반기 부가가치세 신고 자동화"
+  default_prompt: "$vat-filing을 사용해 이번 반기의 플랫폼 매출과 매입세액을 수집·대조하고 검증된 부가가치세 신고 계산서를 만들어줘."

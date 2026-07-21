@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "filing": {
+    "year": 2026,
+    "period_label": "제1기 확정",
+    "start_date": "2026-01-01",
+    "end_date": "2026-06-30",
+    "due_date": "2026-07-27",
+    "taxpayer_label": "개인 일반과세자"
+  },
+  "policy": {
+    "taxable_supply_method": "gross_divide_1_1_floor",
+    "vat_rate": 0.1,
+    "foreign_rounding": "floor_each_line",
+    "electronic_filing_credit_krw": 5000,
+    "card_sales_credit_krw": 0,
+    "card_sales_credit_note": "소프트웨어·정보서비스업 적격성 확인 전 보수적으로 미적용",
+    "foreign_supply_timing_note": "플랫폼 월별 확정 보고서의 End Date를 공급시기로 사용"
+  },
+  "domestic_sales": [
+    {
+      "id": "onestore-2026-01",
+      "platform": "원스토어",
+      "source": "홈택스 판매(결제)대행",
+      "gross_krw": 262050,
+      "include": true,
+      "filing_category": "국내 과세",
+      "evidence": "2026-01 승인",
+      "note": "직접 반영"
+    },
+    {
+      "id": "samsung-2026-02",
+      "platform": "삼성",
+      "source": "홈택스 판매(결제)대행",
+      "gross_krw": 3900,
+      "include": true,
+      "filing_category": "국내 과세",
+      "evidence": "2026-02 승인",
+      "note": "직접 반영"
+    },
+    {
+      "id": "apple-2026-h1-kr",
+      "platform": "Apple",
+      "source": "Sales and Trends",
+      "gross_krw": 92600,
+      "include": true,
+      "filing_category": "국내 과세",
+      "evidence": "Country Code=KR",
+      "note": "홈택스 Apple 행은 중복 제외"
+    },
+    {
+      "id": "google-2026-h1-kr",
+      "platform": "Google",
+      "source": "Play Console 보고서",
+      "gross_krw": 9500,
+      "include": true,
+      "filing_category": "국내 과세",
+      "evidence": "Buyer Country=KR",
+      "note": "원천자료 공급가액 8,636원·세액 864원"
+    }
+  ],
+  "foreign_sales": [
+    {"id":"apple-2026-01-jp","supply_date":"2026-01-31","platform":"Apple","revenue_type":"인앱결제","country":"JP","currency":"JPY","amount":4700,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"apple-2026-01-ca","supply_date":"2026-01-31","platform":"Apple","revenue_type":"인앱결제","country":"CA","currency":"CAD","amount":64.93,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"apple-2026-01-gb","supply_date":"2026-01-31","platform":"Apple","revenue_type":"인앱결제","country":"GB","currency":"GBP","amount":6.99,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"apple-2026-02-tw","supply_date":"2026-02-28","platform":"Apple","revenue_type":"인앱결제","country":"TW","currency":"TWD","amount":530,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"apple-2026-02-th","supply_date":"2026-02-28","platform":"Apple","revenue_type":"인앱결제","country":"TH","currency":"THB","amount":249,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"apple-2026-03-vn","supply_date":"2026-03-31","platform":"Apple","revenue_type":"인앱결제","country":"VN","currency":"VND","amount":179000,"include":true,"rate_class":"lookup","evidence":"Sales and Trends","note":""},
+    {"id":"google-2026-01-us","supply_date":"2026-01-31","platform":"Google","revenue_type":"인앱결제","country":"US","currency":"KRW","amount":1430,"include":true,"rate_class":"krw","evidence":"Play Console 원화 보고서","note":""},
+    {"id":"google-2026-02-hk","supply_date":"2026-02-28","platform":"Google","revenue_type":"인앱결제","country":"HK","currency":"KRW","amount":7389,"include":true,"rate_class":"krw","evidence":"Play Console 원화 보고서","note":""},
+    {"id":"admob-2026-01","supply_date":"2026-01-31","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":20.27,"include":true,"rate_class":"lookup","evidence":"AdMob+AppLovin(NB)","note":""},
+    {"id":"admob-2026-01-prior-adjustment","supply_date":"2026-01-31","platform":"AdMob","revenue_type":"전기 무효트래픽 조정","country":"해외","currency":"USD","amount":-0.18,"include":false,"rate_class":"lookup","evidence":"2026-01-04 거래","note":"2025년 말 잔액에 대한 전기 조정"},
+    {"id":"admob-2026-02","supply_date":"2026-02-28","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":20.30,"include":true,"rate_class":"lookup","evidence":"AdMob+AppLovin(NB)","note":""},
+    {"id":"admob-2026-03","supply_date":"2026-03-31","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":18.85,"include":true,"rate_class":"lookup","evidence":"AdMob+AppLovin(NB)","note":""},
+    {"id":"admob-2026-04","supply_date":"2026-04-30","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":3.52,"include":true,"rate_class":"lookup","evidence":"월별 거래 CSV","note":"무효트래픽 조정 반영"},
+    {"id":"admob-2026-05","supply_date":"2026-05-31","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":3.88,"include":true,"rate_class":"lookup","evidence":"월별 거래 CSV","note":"AdSense 0.01 포함"},
+    {"id":"admob-2026-06","supply_date":"2026-06-30","platform":"AdMob","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":5.76,"include":true,"rate_class":"lookup","evidence":"월별 거래 CSV","note":"AdSense 0.02 포함"},
+    {"id":"meta-2026-02","supply_date":"2026-02-28","platform":"Meta","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":0.07,"include":true,"rate_class":"lookup","evidence":"Feb Statement","note":""},
+    {"id":"meta-2026-03","supply_date":"2026-03-31","platform":"Meta","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":0.36,"include":true,"rate_class":"lookup","evidence":"Mar Statement","note":""},
+    {"id":"meta-2026-04","supply_date":"2026-04-30","platform":"Meta","revenue_type":"광고 확정수익","country":"해외","currency":"USD","amount":0.01,"include":true,"rate_class":"lookup","evidence":"Apr Statement","note":""}
+  ],
+  "exchange_rates": [
+    {"date":"2026-01-31","currency":"USD","unit":1,"rate":1427.00,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-02-28","currency":"USD","unit":1,"rate":1424.50,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-03-31","currency":"USD","unit":1,"rate":1513.40,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-04-30","currency":"USD","unit":1,"rate":1476.10,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-05-31","currency":"USD","unit":1,"rate":1505.80,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-06-30","currency":"USD","unit":1,"rate":1541.50,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-01-31","currency":"JPY","unit":100,"rate":932.89,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-01-31","currency":"CAD","unit":1,"rate":1057.94,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-01-31","currency":"GBP","unit":1,"rate":1970.62,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-02-28","currency":"TWD","unit":1,"rate":45.57,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-02-28","currency":"THB","unit":1,"rate":45.80,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"},
+    {"date":"2026-03-31","currency":"VND","unit":100,"rate":5.74,"source":"서울외국환중개","source_url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","note":"월말 매매기준율"}
+  ],
+  "input_vat": [
+    {"id":"card-2026-q1","channel":"사업용 신용카드","period":"2026-01-01~03-31","count":8,"supply_krw":69429,"vat_krw":6941,"non_taxable_krw":0,"total_krw":76370,"deductible":true,"status":"모두 공제","evidence":"홈택스 공제금액 조회","note":""},
+    {"id":"card-2026-q2","channel":"사업용 신용카드","period":"2026-04-01~06-30","count":10,"supply_krw":198477,"vat_krw":19845,"non_taxable_krw":0,"total_krw":218322,"deductible":true,"status":"모두 공제","evidence":"홈택스 공제금액 조회","note":""},
+    {"id":"invoice-2026-h1","channel":"전자세금계산서","period":"2026-01-01~06-30","count":0,"supply_krw":0,"vat_krw":0,"non_taxable_krw":0,"total_krw":0,"deductible":true,"status":"거래 없음","evidence":"사용자 확인","note":""},
+    {"id":"cash-receipt-2026-h1","channel":"지출증빙 현금영수증","period":"2026-01-01~06-30","count":0,"supply_krw":0,"vat_krw":0,"non_taxable_krw":0,"total_krw":0,"deductible":true,"status":"거래 없음","evidence":"사용자 확인","note":""}
+  ],
+  "reconciliations": [
+    {"label":"홈택스 판매대행 전체","amount_krw":477224,"treatment":"대조용","note":"Apple 중복 포함"},
+    {"label":"홈택스 Apple 관련 행","amount_krw":211274,"treatment":"신고 합계 제외","note":"플랫폼 보고서에서 국가별 재분류"},
+    {"label":"홈택스 국내 직접매출","amount_krw":265950,"treatment":"신고 포함","note":"원스토어+삼성"},
+    {"label":"Apple 플랫폼 보고서 전체","amount_krw":264741,"treatment":"국내·해외 분리","note":"국내 92,600원 + 해외 환산액"}
+  ],
+  "checklist": [
+    {"area":"홈택스 매출","evidence":"판매(결제)대행 매출자료","status":"확보","action":"Apple 중복 처리 확인"},
+    {"area":"Apple","evidence":"2026-01~06 Sales and Trends","status":"확보","action":"국가코드·환불 확인"},
+    {"area":"Google","evidence":"2026-01~02 PlayApps 보고서","status":"확보","action":"3~6월 무매출 확인"},
+    {"area":"AdMob","evidence":"2026-01~06 거래 CSV/반기 화면","status":"확보","action":"전기 조정 제외 확인"},
+    {"area":"AppLovin 직접","evidence":"반기 거래 화면","status":"수익 0","action":"0원 증빙 보관"},
+    {"area":"Meta","evidence":"2026-02~04 Statement 화면","status":"확보","action":"반기 합계 확인"},
+    {"area":"매입","evidence":"사업용 신용카드 공제내역","status":"18건 공제","action":"최종 공제 화면 보관"},
+    {"area":"신고 후","evidence":"접수증·신고서 PDF·납부서","status":"대기","action":"제출 후 저장"}
+  ],
+  "official_sources": [
+    {"label":"외화 환산 법령","url":"https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0059&lsiSeq=283641&urlMode=lsScJoRltInfoR","checked_date":"2026-07-21"},
+    {"label":"서울외국환중개 월말환율","url":"https://www.smbs.co.kr/Eng/ExRate/MonLastStdExRate.jsp","checked_date":"2026-07-21"},
+    {"label":"전자신고 세액공제","url":"https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=05&joNo=0104&lsiSeq=286209&urlMode=lsScJoRltInfoR","checked_date":"2026-07-21"}
+  ]
+}
