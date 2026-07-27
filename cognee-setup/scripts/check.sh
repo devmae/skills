@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # cognee 사용 전 환경 체크 스크립트.
-# 사용법: check.sh [repo-root]   (기본값: 현재 디렉토리)
+# 사용법: check.sh [project-root]   (기본값: 현재 디렉토리)
 # 출력: 각 항목별 PASS/FAIL/INFO 라인 + 마지막 RESULT 라인. 모두 통과 시 exit 0.
 set -u
 
-REPO_ROOT="${1:-$(pwd)}"
-ENVRC="$REPO_ROOT/.envrc"
+PROJECT_ROOT="${1:-$(pwd)}"
+ENVRC="$PROJECT_ROOT/.envrc"
+ENVRC_LOCAL="$PROJECT_ROOT/.envrc.local"
 FAILED=0
 
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -67,51 +68,75 @@ else
 fi
 
 # ---------------------------------------------------------------
-# 3. 환경변수 3종 체크 (현재 셸 또는 .envrc 정의 기준)
+# 3. 프로젝트별 환경변수 체크
 # ---------------------------------------------------------------
-check_var() {
+check_var_in_file() {
   VAR="$1"
-  # 현재 셸에 이미 설정되어 있으면 통과
-  CUR="$(printenv "$VAR" 2>/dev/null || true)"
-  if [ -n "$CUR" ]; then
-    pass "$VAR 현재 셸에 설정됨"
-    return
-  fi
-  # .envrc 에 비어있지 않은 값으로 정의되어 있으면 통과
-  if [ -f "$ENVRC" ]; then
-    LINE=$(grep -E "^[[:space:]]*export[[:space:]]+$VAR=" "$ENVRC" | tail -1)
+  FILE="$2"
+  LABEL="$3"
+
+  if [ -f "$FILE" ]; then
+    LINE=$(grep -E "^[[:space:]]*export[[:space:]]+$VAR=" "$FILE" 2>/dev/null | tail -1)
     if [ -n "$LINE" ]; then
       VALUE=$(printf '%s' "$LINE" | sed -E "s/^[[:space:]]*export[[:space:]]+$VAR=//" | sed -E "s/^[\"']//; s/[\"']\$//" | sed -E 's/[[:space:]]*#.*$//')
       if [ -n "$VALUE" ]; then
-        pass "$VAR .envrc에 정의됨"
+        pass "$VAR ${LABEL}에 정의됨"
         return
       fi
-      fail "$VAR .envrc에 있으나 값이 비어 있음"
+      fail "$VAR ${LABEL}에 있으나 값이 비어 있음"
       return
     fi
   fi
-  fail "$VAR 미설정 (현재 셸에도 없고 .envrc에도 없음)"
+  fail "$VAR 미설정 (${LABEL}에 필요)"
 }
 
-check_var COGNEE_BASE_URL
-check_var COGNEE_API_KEY
-check_var COGNEE_PLUGIN_DATASET
+for VAR in COGNEE_BASE_URL COGNEE_API_KEY COGNEE_PLUGIN_DATASET; do
+  if [ -n "$(printenv "$VAR" 2>/dev/null || true)" ]; then
+    info "현재 셸의 $VAR 값은 판정에서 제외함 — 프로젝트 파일로 설정 필요"
+  fi
+done
+
+check_var_in_file COGNEE_BASE_URL "$ENVRC" ".envrc"
+check_var_in_file COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc"
+check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
+
+if [ -f "$ENVRC" ]; then
+  if grep -Eq "^[[:space:]]*export[[:space:]]+COGNEE_API_KEY=" "$ENVRC"; then
+    fail "COGNEE_API_KEY가 .envrc에 있음 — .envrc.local로 옮겨야 함"
+  fi
+  if grep -Eq "^[[:space:]]*(source|\\.)[[:space:]]+.*\\.envrc\\.local" "$ENVRC"; then
+    pass ".envrc가 .envrc.local을 불러옴"
+  else
+    fail ".envrc가 .envrc.local을 불러오지 않음"
+  fi
+fi
 
 # ---------------------------------------------------------------
-# 4. 부가 점검 (.envrc 사용 시)
+# 4. Git 추적과 direnv 점검
 # ---------------------------------------------------------------
 if [ -f "$ENVRC" ]; then
-  if command -v git >/dev/null 2>&1 && git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-    if git -C "$REPO_ROOT" check-ignore -q .envrc 2>/dev/null; then
-      info ".envrc 는 git ignore 됨 (API key 커밋 방지 OK)"
+  if command -v git >/dev/null 2>&1 && git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git -C "$PROJECT_ROOT" check-ignore -q .envrc 2>/dev/null; then
+      fail ".envrc가 git ignore됨 — ignore 규칙을 제거하고 추적해야 함"
+    elif git -C "$PROJECT_ROOT" ls-files --error-unmatch -- .envrc >/dev/null 2>&1; then
+      pass ".envrc가 git에 추적됨"
     else
-      info "경고: .envrc 가 git ignore 되지 않음 — COGNEE_API_KEY가 커밋될 수 있음. .gitignore에 .envrc 추가 권장"
+      fail ".envrc가 git에 추적되지 않음 — git add -f -- .envrc 필요"
     fi
+
+    if git -C "$PROJECT_ROOT" check-ignore -q .envrc.local 2>/dev/null; then
+      pass ".envrc.local이 git ignore됨"
+    else
+      fail ".envrc.local이 git ignore되지 않음 — API key가 commit될 수 있음"
+    fi
+  else
+    info "Git worktree가 아님 — 프로젝트 루트의 .envrc/.envrc.local만 사용"
   fi
+
   if command -v direnv >/dev/null 2>&1; then
     info "direnv 설치됨 — .envrc 수정 후 'direnv allow' 필요"
   else
-    info "direnv 미설치 — .envrc 가 자동 로드되지 않음. 설치: brew install direnv (또는 매번 'source .envrc')"
+    info "direnv 미설치 — 프로젝트 루트에서 매번 'source .envrc' 필요"
   fi
 fi
 

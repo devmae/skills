@@ -4,7 +4,7 @@
 
 | 스킬 | 소개 |
 | --- | --- |
-| `cognee-setup` | 현재 repo에서 Claude Code용 cognee-memory를 쓸 수 있는지 점검하고 설정합니다. |
+| `cognee-setup` | 지정한 프로젝트 폴더에서 Claude Code용 cognee-memory를 쓸 수 있는지 점검하고 설정합니다. |
 | `game-audio-organizer` | 게임 오디오를 실제 음원 기준으로 분석해 MUSIC, VOICE, SFX 폴더로 분류합니다. |
 | `harness-builder` | 코드베이스에 문서, 진행 추적, 검증 절차를 갖춘 Agent harness를 만듭니다. |
 | `project-discovery-architecture` | 초기 아이디어를 제품 목표, 기술 결정, 단계별 개발 계획으로 구체화합니다. |
