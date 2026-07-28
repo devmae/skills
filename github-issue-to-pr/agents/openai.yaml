@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Issue to PR"
+  short_description: "Automate issue fixes into PRs"
+  default_prompt: "Use $github-issue-to-pr with this GitHub issue link to implement the work and open a concise PR."
