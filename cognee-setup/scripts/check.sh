@@ -129,7 +129,6 @@ detect_clients() {
     add_client opencode
   fi
   if command -v antigravity >/dev/null 2>&1 \
-    || [ -f "$PROJECT_ROOT/.agents/mcp_config.json" ] \
     || [ -f "$CHECK_HOME/.gemini/config/mcp_config.json" ]; then
     add_client antigravity
   fi
@@ -164,6 +163,11 @@ else
   IFS="$old_ifs"
 fi
 
+if [ -z "$CLIENTS" ]; then
+  printf 'ERROR --client에 하나 이상의 client가 필요함\n' >&2
+  exit 2
+fi
+
 if [ "$MODE" = "auto" ]; then
   if has_native_client && has_mcp_client; then
     MODE="hybrid"
@@ -190,6 +194,10 @@ info "mode: $MODE"
 
 if [ "$MODE" = "remote" ] && has_mcp_client; then
   fail "Antigravity와 generic MCP client는 --mode mcp 또는 hybrid가 필요함"
+fi
+
+if [ "$MODE" = "hybrid" ] && { ! has_native_client || ! has_mcp_client; }; then
+  fail "hybrid mode는 native client와 MCP client가 모두 필요함"
 fi
 
 # Tailscale은 private tailnet을 쓸 때만 필수다.
@@ -329,6 +337,54 @@ check_opencode_mcp() {
   [ "$config_found" -eq 1 ] || fail "OpenCode Cognee MCP 설정 없음"
 }
 
+validate_antigravity_config() {
+  config_path="$1"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'python3가 없어 JSON을 검사할 수 없음'
+    return 1
+  fi
+
+  python3 - "$config_path" <<'PY'
+import json
+import sys
+from urllib.parse import urlparse
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as file:
+        config = json.load(file)
+except (OSError, json.JSONDecodeError):
+    print("JSON 형식 오류")
+    raise SystemExit(1)
+
+if not isinstance(config, dict):
+    print("최상위 JSON 객체가 필요함")
+    raise SystemExit(1)
+
+servers = config.get("mcpServers")
+server = servers.get("cognee") if isinstance(servers, dict) else None
+if not isinstance(server, dict):
+    print("mcpServers.cognee 객체가 필요함")
+    raise SystemExit(1)
+
+server_url = server.get("serverUrl")
+command = server.get("command")
+has_command = isinstance(command, str) and bool(command.strip())
+has_url = isinstance(server_url, str) and bool(server_url.strip())
+
+if has_url:
+    parsed = urlparse(server_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        print("serverUrl은 http 또는 https 절대 URL이어야 함")
+        raise SystemExit(1)
+
+if not has_url and not has_command:
+    print("serverUrl 또는 command가 필요함")
+    raise SystemExit(1)
+PY
+}
+
 check_antigravity() {
   if command -v antigravity >/dev/null 2>&1; then
     pass "Antigravity CLI 설치됨"
@@ -336,25 +392,17 @@ check_antigravity() {
     info "Antigravity CLI는 찾지 못함 — IDE만 쓸 수 있음"
   fi
 
-  config_found=0
-  for config_path in \
-    "$PROJECT_ROOT/.agents/mcp_config.json" \
-    "$CHECK_HOME/.gemini/config/mcp_config.json"; do
-    if [ -f "$config_path" ] \
-      && grep -Eqi '"cognee"[[:space:]]*:' "$config_path"; then
-      pass "Antigravity Cognee MCP 설정됨 ($config_path)"
-      config_found=1
-      if [ "$config_path" = "$PROJECT_ROOT/.agents/mcp_config.json" ] \
-        && grep -Eqi '"(Authorization|X-Api-Key)"[[:space:]]*:' "$config_path" \
-        && command -v git >/dev/null 2>&1 \
-        && git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-        && ! git -C "$PROJECT_ROOT" check-ignore -q .agents/mcp_config.json 2>/dev/null; then
-        fail "인증 header가 든 .agents/mcp_config.json이 git ignore되지 않음"
-      fi
-      break
-    fi
-  done
-  [ "$config_found" -eq 1 ] || fail "Antigravity Cognee MCP 설정 없음"
+  config_path="$CHECK_HOME/.gemini/config/mcp_config.json"
+  if [ ! -f "$config_path" ]; then
+    fail "Antigravity Cognee MCP 설정 없음 ($config_path)"
+    return
+  fi
+
+  if validation_error="$(validate_antigravity_config "$config_path" 2>&1)"; then
+    pass "Antigravity Cognee MCP 설정됨 ($config_path)"
+  else
+    fail "Antigravity Cognee MCP 설정 오류 ($config_path): $validation_error"
+  fi
 }
 
 for client in $CLIENTS; do

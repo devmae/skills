@@ -50,7 +50,7 @@ export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
 
 Antigravity는 Cognee MCP를 쓴다. REST API URL이 아니라 Streamable HTTP 또는 SSE endpoint가 필요하다.
 
-프로젝트의 `.agents/mcp_config.json`에 기존 server를 보존하며 Cognee를 합친다.
+[Google 공식 MCP 설정](https://codelabs.developers.google.com/developer-knowledge-mcp-antigravity)에 따라 Antigravity 2.0, IDE, CLI가 함께 쓰는 `~/.gemini/config/mcp_config.json`에 기존 server를 보존하며 Cognee를 합친다. Antigravity는 프로젝트별 MCP server 파일을 지원하지 않으므로 `.agents/mcp_config.json`을 만들지 않는다.
 
 ```json
 {
@@ -62,7 +62,7 @@ Antigravity는 Cognee MCP를 쓴다. REST API URL이 아니라 Streamable HTTP �
 }
 ```
 
-Antigravity remote schema는 `url`이 아니라 `serverUrl`을 쓴다. 인증 header에 key 문자열을 넣어야 한다면 이 파일을 Git에서 ignore한다. 먼저 Antigravity UI, OAuth, OS secret store처럼 key를 저장하지 않는 방법을 쓴다. secret 참조를 지원하는지 확인하지 않고 env 문법을 만들지 않는다.
+Antigravity remote schema는 `url`이 아니라 `serverUrl`을 쓴다. user 설정 파일은 Git에 넣지 않는다. 인증 header에 key 문자열을 넣기 전에 Antigravity UI, OAuth, OS secret store처럼 key를 저장하지 않는 방법을 쓴다. secret 참조를 지원하는지 확인하지 않고 env 문법을 만들지 않는다.
 
 IDE 또는 CLI의 MCP manager에서 Cognee server가 연결됐는지 확인한다.
 

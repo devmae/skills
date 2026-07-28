@@ -13,7 +13,7 @@ description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigrav
 
 현재 client를 우선 설정한다. 사용자가 여러 client를 말하면 모두 설정한다. client가 불명확하면 설치된 CLI를 검사한다.
 
-설정은 프로젝트 안에만 둔다. user shell의 전역 rc 파일에는 쓰지 않는다.
+환경변수와 secret은 프로젝트 안에만 둔다. user shell의 전역 rc 파일에는 쓰지 않는다. client가 프로젝트별 MCP server 설정을 지원하지 않으면 공식 user 설정에 Cognee 항목만 합친다.
 
 | 연결 | 쓸 때 | 특징 |
 | --- | --- | --- |

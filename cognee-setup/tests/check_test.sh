@@ -13,7 +13,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$PROJECT/.agents" "$FAKE_HOME/.claude/plugins/marketplaces/cognee" "$FAKE_BIN"
+mkdir -p \
+  "$PROJECT/.agents" \
+  "$FAKE_HOME/.claude/plugins/marketplaces/cognee" \
+  "$FAKE_HOME/.gemini/config" \
+  "$FAKE_BIN"
 
 cat > "$PROJECT/.envrc" <<'EOF'
 export COGNEE_BASE_URL="https://cognee.example"
@@ -45,7 +49,7 @@ cat > "$PROJECT/opencode.json" <<'EOF'
 }
 EOF
 
-cat > "$PROJECT/.agents/mcp_config.json" <<'EOF'
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
 {
   "mcpServers": {
     "cognee": {
@@ -104,7 +108,7 @@ expect_fail_with() {
     printf 'FAIL  %s — 실패해야 함\n' "$name" >&2
     exit 1
   fi
-  if printf '%s\n' "$output" | grep -Fq "$pattern"; then
+  if printf '%s\n' "$output" | grep -Fq -- "$pattern"; then
     printf 'PASS  %s\n' "$name"
   else
     printf 'FAIL  %s — 예상 문구 없음: %s\n%s\n' "$name" "$pattern" "$output" >&2
@@ -126,26 +130,62 @@ expect_fail_with \
   --client antigravity \
   --mode remote
 
-cat > "$PROJECT/.agents/mcp_config.json" <<'EOF'
+expect_fail_with \
+  "native client만 둔 hybrid 거부" \
+  "hybrid mode는 native client와 MCP client가 모두 필요함" \
+  --client claude,codex \
+  --mode hybrid
+
+expect_fail_with \
+  "빈 client 목록 거부" \
+  "--client에 하나 이상의 client가 필요함" \
+  --client "" \
+  --mode remote
+
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
+{
+  "mcpServers": {
+    "cognee": {}
+  }
+}
+EOF
+
+expect_fail_with \
+  "Antigravity transport 누락 거부" \
+  "serverUrl 또는 command가 필요함" \
+  --client antigravity \
+  --mode mcp
+
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
 {
   "mcpServers": {
     "cognee": {
-      "serverUrl": "https://cognee.example/mcp",
-      "headers": {
-        "Authorization": "Bearer fixture-secret"
-      }
+      "serverUrl": "not-a-url"
     }
   }
 }
 EOF
 
-printf '.envrc.local\n' > "$PROJECT/.gitignore"
-git -C "$PROJECT" init -q
-git -C "$PROJECT" add .envrc .gitignore
+expect_fail_with \
+  "Antigravity 잘못된 URL 거부" \
+  "serverUrl은 http 또는 https 절대 URL이어야 함" \
+  --client antigravity \
+  --mode mcp
+
+rm "$FAKE_HOME/.gemini/config/mcp_config.json"
+cat > "$PROJECT/.agents/mcp_config.json" <<'EOF'
+{
+  "mcpServers": {
+    "cognee": {
+      "serverUrl": "https://cognee.example/mcp"
+    }
+  }
+}
+EOF
 
 expect_fail_with \
-  "Antigravity 인증 header 파일 보호" \
-  "인증 header가 든 .agents/mcp_config.json이 git ignore되지 않음" \
+  "Antigravity project-local 비지원" \
+  "Antigravity Cognee MCP 설정 없음" \
   --client antigravity \
   --mode mcp
 
