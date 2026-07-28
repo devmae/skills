@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Commit to PR"
+  short_description: "Push current changes and create a PR"
+  default_prompt: "Use $github-commit-to-pr to push the current changes to a new branch and create a concise Pull Request."
