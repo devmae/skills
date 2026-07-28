@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognee Setup"
+  short_description: "여러 AI client에 Cognee memory 연결"
+  default_prompt: "Use $cognee-setup to connect this project to Cognee across my AI clients."

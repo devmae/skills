@@ -1,10 +1,10 @@
 # Skills
 
-반복 작업을 더 빠르고 일관되게 처리하는 Agent Skill 모음입니다. Codex와 Claude Code에서 쓸 수 있습니다. 각 폴더의 `SKILL.md`에 사용 조건과 작업 절차를 담았습니다.
+반복 작업을 더 빠르고 일관되게 처리하는 Agent Skill 모음입니다. Agent Skills를 지원하는 여러 client에서 쓸 수 있습니다. 각 폴더의 `SKILL.md`에 사용 조건과 작업 절차를 담았습니다.
 
 | 스킬 | 소개 |
 | --- | --- |
-| `cognee-setup` | 지정한 프로젝트 폴더에서 Claude Code용 cognee-memory를 쓸 수 있는지 점검하고 설정합니다. |
+| `cognee-setup` | Claude Code, Codex, OpenCode, Antigravity와 MCP client의 Cognee memory를 점검하고 설정합니다. |
 | `game-audio-organizer` | 게임 오디오를 실제 음원 기준으로 분석해 MUSIC, VOICE, SFX 폴더로 분류합니다. |
 | `harness-builder` | 코드베이스에 문서, 진행 추적, 검증 절차를 갖춘 Agent harness를 만듭니다. |
 | `project-discovery-architecture` | 초기 아이디어를 제품 목표, 기술 결정, 단계별 개발 계획으로 구체화합니다. |
