@@ -9,16 +9,10 @@ description: "현재 대화에서 작업한 파일 변경사항을 새 브랜치
  
 ---
  
-## 도구 정보
+## 사전 조건
  
-Mermaid Chart MCP를 통해 GitHub에 접근한다. 모든 도구 호출에 `clientName: "push-and-pr-skill"` 을 포함한다.
- 
-사용 가능한 도구:
-- `list_branches` — 브랜치 목록 조회 (중복 확인용)
-- `read_mermaid_file` — 현재 파일 내용 및 SHA 조회
-- `list_mermaid_files` — 저장소 파일 목록 조회
-- `create_pr` — 새 브랜치 생성 + 파일 커밋 + PR 오픈 (한 번에)
-- `push_file` — 기존 브랜치에 파일 추가/수정
+- 로컬에 git 저장소가 클론되어 있어야 한다.
+- `gh` CLI가 설치되어 있고 인증돼 있어야 한다. 시작 전에 `gh auth status` 로 확인하고, 실패하면 사용자에게 `gh auth login` 을 안내하고 중단한다.
 ---
  
 ## 워크플로우
@@ -43,13 +37,29 @@ Mermaid Chart MCP를 통해 GitHub에 접근한다. 모든 도구 호출에 `cli
 - 기능 추가 → `add-{무엇을}` 또는 `feat-{무엇을}`
 - 문서 업데이트 → `docs-{무엇을}`
 - 리팩토링 → `refactor-{무엇을}`
-`list_branches` 로 중복 여부를 확인하고, 중복이면 뒤에 `-2`, `-3` 을 붙인다.
+
+로컬과 원격 브랜치의 중복 여부를 확인한다:
+
+```bash
+git branch --all --list '*<브랜치명>*'
+```
+
+중복이면 뒤에 `-2`, `-3` 을 붙인다. 중복이 없으면 새 브랜치를 만든다:
+
+```bash
+git switch -c <브랜치명>
+```
  
 ### 3단계: PR 생성
  
-`create_pr` 으로 브랜치 생성 + 커밋 + PR을 한 번에 만든다.
+현재 대화에서 바꾼 파일만 커밋하고 push한다:
  
-**`files` 배열**: 변경된 모든 파일을 담는다. 각 파일은 `{ path, content }` 형식으로 **전체 파일 내용**을 포함한다.
+```bash
+git status --short
+git add <변경한 파일들>
+git commit -m "<commitMessage>"
+git push -u origin <브랜치명>
+```
  
 **`commitMessage`**: 영어로 간결하게.
 예: `feat: add dark mode toggle`, `fix: resolve null pointer in auth`
@@ -68,6 +78,12 @@ Mermaid Chart MCP를 통해 GitHub에 접근한다. 모든 도구 호출에 `cli
  
 > PR 본문은 핵심만 담는다. 변경된 모든 것을 나열하기보다, 리뷰어가 맥락을 빠르게 파악할 수 있도록 작성한다.
  
+`gh pr create` 로 PR을 만든다:
+
+```bash
+gh pr create --base <베이스 브랜치> --head <브랜치명> --title "<PR 제목>" --body "<PR 본문>"
+```
+
 ### 4단계: PR 링크 제공
  
 PR 생성 후 반드시 클릭 가능한 링크를 컨텍스트에 남긴다:
@@ -80,7 +96,7 @@ PR 생성 후 반드시 클릭 가능한 링크를 컨텍스트에 남긴다:
  
 ## 주의사항
  
-- `create_pr` 의 `headBranch` 는 **존재하지 않는** 새 브랜치명이어야 한다. 반드시 `list_branches` 로 중복 확인 후 사용한다.
-- 파일이 여러 개인 경우 `create_pr` 의 `files` 배열에 모두 담아 **한 번에** 커밋한다.
-- PR 생성 후 추가 파일이 필요하면 `push_file` 로 같은 브랜치에 이어서 커밋한다.
+- 새 브랜치명은 로컬과 원격에 없어야 한다. 반드시 `git branch --all` 로 확인한다.
+- 관련 없는 변경사항을 stage하거나 커밋하지 않는다.
+- PR 생성 후 추가 파일이 필요하면 같은 브랜치에 커밋하고 push한다.
 - 변경사항이 불분명하면 사용자에게 "어떤 파일을 올릴까요?" 라고 확인한다.
