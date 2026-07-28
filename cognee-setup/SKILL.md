@@ -48,7 +48,7 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 `remote` 또는 `hybrid` mode에 필요한 값이 없으면, URL과 dataset은 묻지 않고 자동으로 채운다. 검사에서 확정한 프로젝트 루트의 절대 경로를 넣는다. 예: 프로젝트 루트가 `/work/app`이면 파일은 `/work/app/.envrc`, `/work/app/.envrc.local`이고 dataset은 `app`이다.
 
-agent는 기존 내용을 보존하며 `.envrc`, `.envrc.local`, `.gitignore`에 필요한 항목을 합친다. Git worktree에서는 먼저 `.gitignore`에 `.envrc.local`을 넣고 `.envrc.local`을 만든다. 파일이 이미 있으면 덮어쓰지 않는다. `COGNEE_API_KEY`가 없을 때만 사용자가 바로 바꿀 수 있는 자리표시자를 넣는다. `<project-root-name>`은 실제 폴더명으로 바꾼다.
+agent는 기존 내용을 보존하며 `.envrc`, `.envrc.local`, `.gitignore`에 필요한 항목을 합친다. Git worktree에서는 먼저 `.gitignore`에 `.envrc.local`을 넣는다. `.envrc.local`이 없으면 만들고, 있으면 기존 내용을 보존한다. `COGNEE_API_KEY` 정의가 없을 때만 사용자가 바로 바꿀 수 있는 자리표시자를 추가한다. `<project-root-name>`은 실제 폴더명으로 바꾼다.
 
 API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. `.envrc.local`에만 두며 `.envrc`, Git, 대화, 로그에 넣지 않는다.
 
