@@ -52,7 +52,7 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. `.envrc.local`과 `.gitignore`에만 두며, `.envrc`·git·대화에는 넣지 않는다.
 
-agent는 key 저장 완료를 받으면 프로젝트 루트명과 고정 URL로 아래 파일을 만든다. `<project-root-name>`은 agent가 실제 폴더명으로 바꾼다. 사용자가 값을 정하거나 적지 않는다.
+agent는 key 저장 완료를 받으면 `.envrc`와 `.gitignore`만 만들거나 고친다. 기존 내용을 보존하고 필요한 항목만 합친다. `.envrc.local`은 만들거나 고치지 않는다. `check.sh`로 파일과 `COGNEE_API_KEY` 정의 여부만 확인한다. `<project-root-name>`은 agent가 실제 폴더명으로 바꾼다. 사용자가 값을 정하거나 적지 않는다.
 
 ```bash
 # <프로젝트 루트>/.envrc
@@ -65,7 +65,7 @@ fi
 ```
 
 ```bash
-# <프로젝트 루트>/.envrc.local — git ignore
+# 사용자가 직접 만든 <프로젝트 루트>/.envrc.local 예시 — agent 수정 금지, git ignore
 export COGNEE_API_KEY="<Bagelcode-1Password-cognee-key>"
 ```
 

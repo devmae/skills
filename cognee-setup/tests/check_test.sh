@@ -124,6 +124,25 @@ expect_ok "Codex MCP" --client codex --mode mcp
 expect_ok "OpenCode MCP" --client opencode --mode mcp
 expect_ok "Antigravity MCP" --client antigravity --mode mcp
 expect_ok "native와 MCP hybrid" --client claude,antigravity --mode auto
+
+cp "$PROJECT/.envrc" "$TEST_ROOT/.envrc.valid"
+sed 's#https://kimtaehwan-macmini.tail9f3ac8.ts.net/#https://wrong.example/#' \
+  "$TEST_ROOT/.envrc.valid" > "$PROJECT/.envrc"
+expect_fail_with \
+  "고정 Cognee URL과 다른 값 거부" \
+  "COGNEE_BASE_URL 값이 맞지 않음" \
+  --client claude \
+  --mode remote
+
+sed 's/COGNEE_PLUGIN_DATASET="project"/COGNEE_PLUGIN_DATASET="wrong"/' \
+  "$TEST_ROOT/.envrc.valid" > "$PROJECT/.envrc"
+expect_fail_with \
+  "프로젝트 폴더명과 다른 dataset 거부" \
+  "COGNEE_PLUGIN_DATASET 값이 맞지 않음" \
+  --client claude \
+  --mode remote
+cp "$TEST_ROOT/.envrc.valid" "$PROJECT/.envrc"
+
 expect_fail_with \
   "MCP client의 remote mode 거부" \
   "Antigravity와 generic MCP client는 --mode mcp 또는 hybrid가 필요함" \
