@@ -46,35 +46,29 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 ### 연결값이 없을 때 안내
 
-`remote` 또는 `hybrid` mode에 필요한 값이 없으면, URL과 dataset은 묻지 않고 자동으로 채운다. 검사에서 확정한 프로젝트 루트의 절대 경로를 넣는다. 예: 프로젝트 루트가 `/work/app`이면 파일은 `/work/app/.envrc`, `/work/app/.envrc.local`이고 dataset은 `app`이다.
+`remote` 또는 `hybrid` mode에 필요한 값이 없으면, URL과 dataset은 묻지 않고 자동으로 채운다. 검사에서 확정한 프로젝트 루트의 절대 경로를 넣는다. 예: 프로젝트 루트가 `/work/app`이면 파일은 `/work/app/.envrc`이고 dataset은 `app`이다.
 
-사용자에게는 아래처럼 API key만 안내한다. “`COGNEE_API_KEY`가 필요합니다. Bagelcode 1Password를 열고 검색창에 `cognee`를 입력한 뒤 해당 항목을 여세요. secret을 복사해 `<프로젝트 루트>/.envrc.local`에 직접 넣고, 대화에는 key를 보내지 말고 ‘key 저장 완료’라고만 알려 주세요.”
+agent는 기존 내용을 보존하며 `.envrc`에 필요한 항목을 합친다. `COGNEE_API_KEY`에는 사용자가 바로 바꿀 수 있는 자리표시자를 넣는다. `<project-root-name>`은 실제 폴더명으로 바꾼다.
 
-API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. `.envrc.local`과 `.gitignore`에만 두며, `.envrc`·git·대화에는 넣지 않는다.
-
-agent는 key 저장 완료를 받으면 `.envrc`와 `.gitignore`만 만들거나 고친다. 기존 내용을 보존하고 필요한 항목만 합친다. `.envrc.local`은 만들거나 고치지 않는다. `check.sh`로 파일과 `COGNEE_API_KEY` 정의 여부만 확인한다. `<project-root-name>`은 agent가 실제 폴더명으로 바꾼다. 사용자가 값을 정하거나 적지 않는다.
+API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. 대화나 로그에 출력하지 않는다.
 
 ```bash
 # <프로젝트 루트>/.envrc
 export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 export COGNEE_PLUGIN_DATASET="<project-root-name>"
+export COGNEE_API_KEY="API키를 입력하세요"
 
 if [ -f .envrc.local ]; then
   source .envrc.local
 fi
 ```
 
-```bash
-# 사용자가 직접 만든 <프로젝트 루트>/.envrc.local 예시 — agent 수정 금지, git ignore
-export COGNEE_API_KEY="<Bagelcode-1Password-cognee-key>"
-```
-
-답변 끝에는 다음 행동을 정확히 제시한다: “Bagelcode 1Password에서 `cognee`를 검색해 API key를 `<프로젝트 루트>/.envrc.local`에 저장한 뒤 ‘key 저장 완료’라고 알려 주세요. 그러면 설정 후 health·쓰기·읽기를 검증합니다.”
+답변 끝에는 다음 행동을 정확히 제시한다: “Bagelcode 1Password에서 `cognee`를 검색해 `<프로젝트 루트>/.envrc`의 `API키를 입력하세요`를 실제 API key로 바꾼 뒤 ‘key 저장 완료’라고 알려 주세요. 그러면 health·쓰기·읽기를 검증합니다.”
 
 | 파일 | 내용 |
 | --- | --- |
-| `.envrc` | 공개 URL, dataset, OpenCode alias, `.envrc.local` load |
-| `.envrc.local` | API key, LLM key 같은 secret |
+| `.envrc` | URL, dataset, API key, OpenCode alias, `.envrc.local` load |
+| `.envrc.local` | LLM key, MCP bearer token 같은 다른 secret |
 | `.gitignore` | `.envrc.local`과 secret이 든 client 설정 |
 
 `remote` mode의 기본값은 다음과 같다.
@@ -83,14 +77,11 @@ export COGNEE_API_KEY="<Bagelcode-1Password-cognee-key>"
 export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
 export COGNEE_PLUGIN_DATASET="<agent가 확정한 프로젝트 루트 폴더명>"
+export COGNEE_API_KEY="API키를 입력하세요"
 
 if [ -f .envrc.local ]; then
   source .envrc.local
 fi
-```
-
-```bash
-export COGNEE_API_KEY="..."
 ```
 
 `COGNEE_SERVICE_URL`은 OpenCode가 필요할 때만 넣는다.
