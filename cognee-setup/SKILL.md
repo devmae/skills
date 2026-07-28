@@ -42,7 +42,34 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 ## 3. 공통 설정
 
-값을 추측하지 않는다. 필요한 값을 사용자가 주지 않으면 파일을 만들지 말고 미완료로 끝낸다.
+`remote` mode의 `COGNEE_BASE_URL`은 `https://kimtaehwan-macmini.tail9f3ac8.ts.net/`로 고정한다. `COGNEE_PLUGIN_DATASET`은 사용자가 적지 않는다. agent가 확정한 프로젝트 루트의 폴더명을 사용한다. 예: `/work/my-project`는 `my-project`다. 사용자에게는 `COGNEE_API_KEY`만 요청한다.
+
+### 연결값이 없을 때 안내
+
+`remote` 또는 `hybrid` mode에 필요한 값이 없으면, URL과 dataset은 묻지 않고 자동으로 채운다. 검사에서 확정한 프로젝트 루트의 절대 경로를 넣는다. 예: 프로젝트 루트가 `/work/app`이면 파일은 `/work/app/.envrc`, `/work/app/.envrc.local`이고 dataset은 `app`이다.
+
+사용자에게는 아래처럼 API key만 안내한다. “`COGNEE_API_KEY`가 필요합니다. Bagelcode 1Password를 열고 검색창에 `cognee`를 입력한 뒤 해당 항목을 여세요. secret을 복사해 `<프로젝트 루트>/.envrc.local`에 직접 넣고, 대화에는 key를 보내지 말고 ‘key 저장 완료’라고만 알려 주세요.”
+
+API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. `.envrc.local`과 `.gitignore`에만 두며, `.envrc`·git·대화에는 넣지 않는다.
+
+agent는 key 저장 완료를 받으면 프로젝트 루트명과 고정 URL로 아래 파일을 만든다. `<project-root-name>`은 agent가 실제 폴더명으로 바꾼다. 사용자가 값을 정하거나 적지 않는다.
+
+```bash
+# <프로젝트 루트>/.envrc
+export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
+export COGNEE_PLUGIN_DATASET="<project-root-name>"
+
+if [ -f .envrc.local ]; then
+  source .envrc.local
+fi
+```
+
+```bash
+# <프로젝트 루트>/.envrc.local — git ignore
+export COGNEE_API_KEY="<Bagelcode-1Password-cognee-key>"
+```
+
+답변 끝에는 다음 행동을 정확히 제시한다: “Bagelcode 1Password에서 `cognee`를 검색해 API key를 `<프로젝트 루트>/.envrc.local`에 저장한 뒤 ‘key 저장 완료’라고 알려 주세요. 그러면 설정 후 health·쓰기·읽기를 검증합니다.”
 
 | 파일 | 내용 |
 | --- | --- |
@@ -53,9 +80,9 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 `remote` mode의 기본값은 다음과 같다.
 
 ```bash
-export COGNEE_BASE_URL="..."
+export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
-export COGNEE_PLUGIN_DATASET="..."
+export COGNEE_PLUGIN_DATASET="<agent가 확정한 프로젝트 루트 폴더명>"
 
 if [ -f .envrc.local ]; then
   source .envrc.local

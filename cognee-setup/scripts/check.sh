@@ -71,6 +71,8 @@ PROJECT_ROOT="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)"
 ENVRC="$PROJECT_ROOT/.envrc"
 ENVRC_LOCAL="$PROJECT_ROOT/.envrc.local"
 CHECK_HOME="${COGNEE_CHECK_HOME:-$HOME}"
+FIXED_COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
+PROJECT_DATASET="$(basename "$PROJECT_ROOT")"
 
 case "$MODE" in
   auto|remote|local|mcp|hybrid) ;;
@@ -107,6 +109,26 @@ check_var_in_file() {
   fi
 
   fail "$var_name 미설정 (${label}에 필요)"
+  return 1
+}
+
+check_var_equals() {
+  var_name="$1"
+  file_path="$2"
+  label="$3"
+  expected="$4"
+
+  if ! value="$(file_var_value "$var_name" "$file_path")"; then
+    fail "$var_name 미설정 (${label}에 필요)"
+    return 1
+  fi
+
+  if [ "$value" = "$expected" ]; then
+    pass "$var_name ${label} 값 확인됨"
+    return 0
+  fi
+
+  fail "$var_name 값이 맞지 않음 (${label}에서 $expected 필요)"
   return 1
 }
 
@@ -429,24 +451,24 @@ done
 
 case "$MODE" in
   remote)
-    check_var_in_file COGNEE_BASE_URL "$ENVRC" ".envrc"
-    check_var_in_file COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc"
+    check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
+    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
     check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
     if contains_client opencode; then
       check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
     fi
     ;;
   hybrid)
-    check_var_in_file COGNEE_BASE_URL "$ENVRC" ".envrc"
+    check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
     check_var_in_file COGNEE_MCP_URL "$ENVRC" ".envrc"
-    check_var_in_file COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc"
+    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
     check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
     if contains_client opencode; then
       check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
     fi
     ;;
   local)
-    check_var_in_file COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc"
+    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
     if contains_client claude \
       || contains_client codex \
       || contains_client antigravity \
@@ -459,7 +481,7 @@ case "$MODE" in
     ;;
   mcp)
     check_var_in_file COGNEE_MCP_URL "$ENVRC" ".envrc"
-    check_var_in_file COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc"
+    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
     if ! contains_client antigravity && ! contains_client mcp; then
       info "native client에 MCP를 선택함 — 자동 capture는 native plugin보다 적을 수 있음"
     fi

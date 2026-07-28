@@ -20,10 +20,10 @@ mkdir -p \
   "$FAKE_BIN"
 
 cat > "$PROJECT/.envrc" <<'EOF'
-export COGNEE_BASE_URL="https://cognee.example"
+export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 export COGNEE_MCP_URL="https://cognee.example/mcp"
 export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
-export COGNEE_PLUGIN_DATASET="fixture"
+export COGNEE_PLUGIN_DATASET="project"
 
 if [ -f .envrc.local ]; then
   source .envrc.local
