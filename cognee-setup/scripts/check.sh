@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Cognee client와 프로젝트별 환경 설정을 검사한다.
-# 사용법: check.sh [project-root] [--client NAME[,NAME...]] [--mode auto|remote|local|mcp|hybrid] [--require-tailscale]
+# 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mode auto|remote|local|mcp|hybrid] [--require-tailscale]
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_ROOT=""
+PICK_PROJECT_ROOT=0
 CLIENT_SPEC="auto"
 MODE="auto"
 REQUIRE_TAILSCALE=0
@@ -15,9 +17,10 @@ info() { printf 'INFO  %s\n' "$1"; }
 
 usage() {
   cat <<'EOF'
-Usage: check.sh [project-root] [options]
+Usage: check.sh [project-root|--pick] [options]
 
 Options:
+  --pick                    OS folder picker로 프로젝트 루트 선택
   --client NAME[,NAME...]  auto, all, claude, codex, opencode, antigravity, mcp
   --mode MODE              auto, remote, local, mcp, hybrid
   --require-tailscale      Tailscale 설치와 연결을 필수로 검사
@@ -27,6 +30,10 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --pick)
+      PICK_PROJECT_ROOT=1
+      shift
+      ;;
     --client)
       [ "$#" -ge 2 ] || { printf 'ERROR --client 값이 필요함\n' >&2; exit 2; }
       CLIENT_SPEC="$2"
@@ -61,7 +68,39 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if [ "$PICK_PROJECT_ROOT" -eq 1 ]; then
+  if [ -n "$PROJECT_ROOT" ]; then
+    printf 'ERROR 프로젝트 경로와 --pick을 함께 쓸 수 없음\n' >&2
+    exit 2
+  fi
+
+  NODE_BIN="${COGNEE_NODE_BIN:-node}"
+  if ! command -v "$NODE_BIN" >/dev/null 2>&1; then
+    printf 'ERROR folder picker 실행에 Node.js가 필요함\n' >&2
+    exit 2
+  fi
+  if PROJECT_ROOT="$("$NODE_BIN" "$SCRIPT_DIR/pick-project-folder.mjs")"; then
+    :
+  else
+    picker_status=$?
+    exit "$picker_status"
+  fi
+fi
+
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+case "$PROJECT_ROOT" in
+  [A-Za-z]:[\\/]*)
+    if command -v cygpath >/dev/null 2>&1; then
+      if PROJECT_ROOT="$(cygpath -u "$PROJECT_ROOT")"; then
+        :
+      else
+        printf 'ERROR Windows 프로젝트 경로를 Bash 경로로 바꿀 수 없음\n' >&2
+        exit 2
+      fi
+    fi
+    ;;
+esac
+
 if [ ! -d "$PROJECT_ROOT" ]; then
   printf 'ERROR 프로젝트 폴더가 없음: %s\n' "$PROJECT_ROOT" >&2
   exit 2

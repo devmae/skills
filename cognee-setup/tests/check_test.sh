@@ -7,6 +7,7 @@ TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/cognee-check.XXXXXX")"
 PROJECT="$TEST_ROOT/project"
 FAKE_HOME="$TEST_ROOT/home"
 FAKE_BIN="$TEST_ROOT/bin"
+NODE_BIN="$(node -p 'process.execPath')"
 
 cleanup() {
   rm -rf "$TEST_ROOT"
@@ -81,7 +82,22 @@ cat > "$FAKE_BIN/opencode" <<'EOF'
 exit 0
 EOF
 
-chmod +x "$FAKE_BIN/claude" "$FAKE_BIN/codex" "$FAKE_BIN/opencode"
+cat > "$FAKE_BIN/folder-picker" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$COGNEE_PICKER_RESULT"
+EOF
+
+cat > "$FAKE_BIN/cygpath" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$COGNEE_CYGPATH_RESULT"
+EOF
+
+chmod +x \
+  "$FAKE_BIN/claude" \
+  "$FAKE_BIN/codex" \
+  "$FAKE_BIN/opencode" \
+  "$FAKE_BIN/folder-picker" \
+  "$FAKE_BIN/cygpath"
 
 run_check() {
   PATH="$FAKE_BIN:/usr/bin:/bin" \
@@ -124,6 +140,40 @@ expect_ok "Codex MCP" --client codex --mode mcp
 expect_ok "OpenCode MCP" --client opencode --mode mcp
 expect_ok "Antigravity MCP" --client antigravity --mode mcp
 expect_ok "native와 MCP hybrid" --client claude,antigravity --mode auto
+
+if output="$(
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+    COGNEE_CHECK_HOME="$FAKE_HOME" \
+    COGNEE_NODE_BIN="$NODE_BIN" \
+    COGNEE_PICKER_PLATFORM=darwin \
+    COGNEE_OSASCRIPT_BIN="$FAKE_BIN/folder-picker" \
+    COGNEE_PICKER_RESULT="$PROJECT" \
+    bash "$CHECK_SCRIPT" --pick --client claude --mode remote 2>&1
+)"; then
+  printf 'PASS  folder picker 선택 경로 검사\n'
+else
+  printf 'FAIL  folder picker 선택 경로 검사\n%s\n' "$output" >&2
+  exit 1
+fi
+
+if output="$(
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+    COGNEE_CHECK_HOME="$FAKE_HOME" \
+    COGNEE_CYGPATH_RESULT="$PROJECT" \
+    bash "$CHECK_SCRIPT" 'C:\selected project' --client claude --mode remote 2>&1
+)"; then
+  printf 'PASS  Windows 경로를 Bash 경로로 변환\n'
+else
+  printf 'FAIL  Windows 경로를 Bash 경로로 변환\n%s\n' "$output" >&2
+  exit 1
+fi
+
+expect_fail_with \
+  "프로젝트 경로와 picker 동시 지정 거부" \
+  "프로젝트 경로와 --pick을 함께 쓸 수 없음" \
+  --pick \
+  --client claude \
+  --mode remote
 
 cp "$PROJECT/.envrc" "$TEST_ROOT/.envrc.valid"
 sed 's#https://kimtaehwan-macmini.tail9f3ac8.ts.net/#https://wrong.example/#' \

@@ -9,7 +9,17 @@ description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigrav
 
 ## 1. 범위 확정
 
-사용자가 지정한 폴더를 프로젝트 루트로 쓴다. Git 정보로 다른 경로를 고르지 않는다. 경로가 없으면 현재 폴더를 쓴다.
+사용자가 지정한 폴더를 프로젝트 루트로 쓴다. Git 정보로 다른 경로를 고르지 않는다.
+
+경로를 지정하지 않았으면 local desktop에서 folder picker를 띄운다. 사용자가 직접 경로를 입력하게 하지 않는다. picker 실행에 GUI 승인이 필요하면 요청한다.
+
+```bash
+bash <이 스킬 경로>/scripts/check.sh --pick \
+  --client <현재 client> \
+  --mode remote
+```
+
+picker는 macOS에서 AppleScript, Windows에서 PowerShell을 쓴다. 사용자가 취소하면 설정을 멈춘다. SSH, container, headless 환경처럼 GUI를 쓸 수 없으면 이유를 알리고 현재 폴더를 쓸지 확인한다. 사용자가 현재 폴더를 요청했을 때만 경로 없이 기존 검사 명령을 실행한다.
 
 현재 client를 우선 설정한다. 사용자가 여러 client를 말하면 모두 설정한다. client가 불명확하면 설치된 CLI를 검사한다.
 
@@ -35,6 +45,8 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
   --client <현재 client> \
   --mode remote
 ```
+
+프로젝트 루트를 받았으면 경로 인자를 쓴다. 받지 않았으면 `--pick`을 쓴다. 둘을 함께 쓰지 않는다.
 
 현재 client를 알면 이름을 명시한다. `auto`는 설치된 client를 모두 검사하므로 client를 모를 때만 쓴다. Tailscale 주소를 쓸 때만 `--require-tailscale`을 붙인다. `--mode auto`는 선택한 client와 프로젝트 env를 보고 mode를 고른다. native client와 MCP client가 함께 있으면 `hybrid`를 쓴다. 아무 값도 없으면 기존 동작과 맞게 `remote`를 쓴다.
 
