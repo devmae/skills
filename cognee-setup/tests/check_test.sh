@@ -24,7 +24,6 @@ export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 export COGNEE_MCP_URL="https://cognee.example/mcp"
 export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
 export COGNEE_PLUGIN_DATASET="project"
-export COGNEE_API_KEY="fixture-secret"
 
 if [ -f .envrc.local ]; then
   source .envrc.local
@@ -32,6 +31,7 @@ fi
 EOF
 
 cat > "$PROJECT/.envrc.local" <<'EOF'
+export COGNEE_API_KEY="fixture-secret"
 export LLM_API_KEY="fixture-llm-secret"
 EOF
 

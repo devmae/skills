@@ -453,7 +453,7 @@ case "$MODE" in
   remote)
     check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
     check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    check_var_in_file COGNEE_API_KEY "$ENVRC" ".envrc"
+    check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
     if contains_client opencode; then
       check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
     fi
@@ -462,7 +462,7 @@ case "$MODE" in
     check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
     check_var_in_file COGNEE_MCP_URL "$ENVRC" ".envrc"
     check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    check_var_in_file COGNEE_API_KEY "$ENVRC" ".envrc"
+    check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
     if contains_client opencode; then
       check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
     fi
@@ -489,7 +489,7 @@ case "$MODE" in
 esac
 
 if [ -f "$ENVRC" ]; then
-  if grep -Eq '^[[:space:]]*export[[:space:]]+(COGNEE_MCP_BEARER_TOKEN|LLM_API_KEY)=' "$ENVRC"; then
+  if grep -Eq '^[[:space:]]*export[[:space:]]+(COGNEE_API_KEY|COGNEE_MCP_BEARER_TOKEN|LLM_API_KEY)=' "$ENVRC"; then
     fail "secret이 .envrc에 있음 — .envrc.local로 옮겨야 함"
   fi
   if grep -Eq "^[[:space:]]*(source|\\.)[[:space:]]+.*\\.envrc\\.local" "$ENVRC"; then
