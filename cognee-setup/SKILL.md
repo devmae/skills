@@ -1,17 +1,17 @@
 ---
 name: cognee-setup
-description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigravity와 그 밖의 MCP client가 Cognee memory를 쓰도록 점검하고 설정한다. Git 저장소가 아닌 폴더도 지원한다. native Cognee plugin, MCP 연결, Tailscale, 프로젝트별 COGNEE_BASE_URL / COGNEE_MCP_URL / COGNEE_API_KEY / COGNEE_PLUGIN_DATASET 설정을 검사한다. 사용자가 "cognee 셋업", "cognee 체크", "cognee 환경 확인", "cognee 되는지 봐줘", "기억 서버 연결", "여러 agent에서 기억 공유" 등을 요청할 때 사용한다.
+description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigravity와 그 밖의 MCP client가 Tailscale의 원격 Cognee memory를 API key나 프로젝트 env 파일 없이 쓰도록 점검하고 설정한다. Git 저장소가 아닌 폴더도 지원한다. 사용자가 "cognee 셋업", "cognee 체크", "cognee 환경 확인", "cognee 되는지 봐줘", "기억 서버 연결", "여러 agent에서 기억 공유" 등을 요청할 때 사용한다.
 ---
 
 # Cognee Setup
 
-프로젝트별 Cognee 연결을 만든다. model 이름이 아니라 Cognee를 실행할 client를 기준으로 설정한다.
+API key와 프로젝트 env 파일 없이 Cognee를 연결한다. 원격 주소는 스킬에 고정하고 dataset은 프로젝트 폴더명으로 계산한다.
 
 ## 1. 범위 확정
 
 사용자가 지정한 폴더를 프로젝트 루트로 쓴다. Git 정보로 다른 경로를 고르지 않는다.
 
-경로를 지정하지 않았으면 local desktop에서 folder picker를 띄운다. 사용자가 직접 경로를 입력하게 하지 않는다. picker 실행에 GUI 승인이 필요하면 요청한다.
+경로가 없으면 local desktop에서 folder picker를 띄운다. GUI 승인이 필요하면 요청한다.
 
 ```bash
 bash <이 스킬 경로>/scripts/check.sh --pick \
@@ -19,125 +19,88 @@ bash <이 스킬 경로>/scripts/check.sh --pick \
   --mode remote
 ```
 
-picker는 macOS에서 AppleScript, Windows에서 PowerShell을 쓴다. 사용자가 취소하면 설정을 멈춘다. SSH, container, headless 환경처럼 GUI를 쓸 수 없으면 이유를 알리고 현재 폴더를 쓸지 확인한다. 사용자가 현재 폴더를 요청했을 때만 경로 없이 기존 검사 명령을 실행한다.
+picker는 macOS에서 AppleScript, Windows에서 PowerShell을 쓴다. 사용자가 취소하면 멈춘다. GUI를 쓸 수 없으면 이유를 말하고 현재 폴더를 쓸지 확인한다.
 
 현재 client를 우선 설정한다. 사용자가 여러 client를 말하면 모두 설정한다. client가 불명확하면 설치된 CLI를 검사한다.
 
-환경변수와 secret은 프로젝트 안에만 둔다. user shell의 전역 rc 파일에는 쓰지 않는다. client가 프로젝트별 MCP server 설정을 지원하지 않으면 공식 user 설정에 Cognee 항목만 합친다.
+이 스킬은 `remote` mode만 쓴다. 연결 경로는 local stdio MCP bridge → Tailscale Cognee REST다.
 
-| 연결 | 쓸 때 | 특징 |
-| --- | --- | --- |
-| `remote` | 원격 Cognee REST API 사용 | Claude, Codex, OpenCode native plugin에 권장 |
-| `local` | client 또는 로컬 서비스가 Cognee 실행 | client별 시작 방식이 다름 |
-| `mcp` | Antigravity 또는 generic MCP client 사용 | Cognee MCP endpoint가 따로 필요 |
-| `hybrid` | native client와 MCP client를 함께 사용 | REST API와 MCP endpoint를 모두 설정 |
+keyless remote mode에서는 native Cognee plugin을 쓰지 않는다. 현재 native plugin은 key를 찾거나 새로 만들기 때문이다. 모든 client에 같은 MCP bridge를 등록한다.
 
-Claude, Codex, OpenCode에는 native plugin을 우선 쓴다. native plugin은 session과 tool 사용을 자동 저장한다. Antigravity와 그 밖의 client에는 MCP를 쓴다.
+선택한 client 절만 [references/clients.md](references/clients.md)에서 읽는다.
 
-선택한 client의 명령과 설정 파일만 [references/clients.md](references/clients.md)에서 읽는다.
+## 2. 고정 규칙
 
-## 2. 검사
+다음 값은 묻거나 파일에서 읽지 않는다.
 
-`--client`에는 쉼표로 여러 값을 줄 수 있다. 값은 `auto`, `all`, `claude`, `codex`, `opencode`, `antigravity`, `mcp`다.
+| 값 | 규칙 |
+| --- | --- |
+| Cognee REST URL | `https://kimtaehwan-macmini.tail9f3ac8.ts.net/` |
+| dataset | 확정한 프로젝트 루트의 폴더명 |
+| 인증 | Tailscale grant 또는 ACL |
+
+예: `/work/my-project`의 dataset은 `my-project`다.
+
+프로젝트 env 파일을 만들거나 읽지 않는다. Cognee API key를 만들거나 읽거나 client에 넘기지 않는다. 기존 프로젝트 파일도 이 스킬의 판정 근거로 쓰지 않는다.
+
+remote server는 앱 인증을 꺼야 한다. Tailscale에서 server 접근을 허용할 device, user, tag만 제한한다. public network에 Cognee port를 열지 않는다.
+
+## 3. 설정
+
+remote mode는 다음 bridge를 stdio MCP server로 등록한다.
+
+```bash
+uvx cognee-mcp \
+  --api-url https://kimtaehwan-macmini.tail9f3ac8.ts.net/
+```
+
+token 인자를 추가하지 않는다. URL 뒤에 `/mcp`도 붙이지 않는다. bridge가 REST API를 MCP tool로 바꾼다.
+
+각 client 설정은 [references/clients.md](references/clients.md)를 따른다. 기존 설정을 보존하고 `cognee` 항목만 합친다. native Cognee plugin이 켜져 있으면 중복 저장과 key 발급을 막기 위해 끄거나 지운다.
+
+agent에게 다음 규칙을 준다.
+
+> Cognee의 `remember`, `recall`, `forget`을 쓸 때 dataset을 생략하지 말고 현재 프로젝트 루트의 폴더명을 쓴다.
+
+MCP API mode는 dataset 기본값을 client별로 만들 수 있다. 따라서 모든 memory 호출에 계산한 dataset을 명시해야 여러 client가 기억을 공유한다.
+
+## 4. 검사
+
+`--client` 값은 `auto`, `all`, `claude`, `codex`, `opencode`, `antigravity`, `mcp`다. 쉼표로 여러 값을 줄 수 있다.
 
 ```bash
 bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
   --client <현재 client> \
-  --mode remote
+  --mode remote \
+  --probe
 ```
 
-프로젝트 루트를 받았으면 경로 인자를 쓴다. 받지 않았으면 `--pick`을 쓴다. 둘을 함께 쓰지 않는다.
+`--probe`는 key 없이 `/health`와 `/api/v1/datasets`를 호출한다. `401` 또는 `403`이면 server 앱 인증이 아직 켜진 상태다. 이때 client 설정을 반복하지 말고 server 설정을 고친다.
 
-현재 client를 알면 이름을 명시한다. `auto`는 설치된 client를 모두 검사하므로 client를 모를 때만 쓴다. Tailscale 주소를 쓸 때만 `--require-tailscale`을 붙인다. `--mode auto`는 선택한 client와 프로젝트 env를 보고 mode를 고른다. native client와 MCP client가 함께 있으면 `hybrid`를 쓴다. 아무 값도 없으면 기존 동작과 맞게 `remote`를 쓴다.
+`remote` mode는 Tailscale 연결, `uvx`, client MCP 등록, 고정 URL, token 인자 부재를 검사한다. `RESULT OK`는 설정과 keyless REST probe가 모두 통과했을 때만 쓴다.
 
-스크립트는 현재 shell의 `COGNEE_*` 값을 통과 근거로 쓰지 않는다. 프로젝트 파일과 client 설정만 검사한다.
+## 5. 실제 검증
 
-## 3. 공통 설정
-
-`remote` mode의 `COGNEE_BASE_URL`은 `https://kimtaehwan-macmini.tail9f3ac8.ts.net/`로 고정한다. `COGNEE_PLUGIN_DATASET`은 사용자가 적지 않는다. agent가 확정한 프로젝트 루트의 폴더명을 사용한다. 예: `/work/my-project`는 `my-project`다. 사용자에게는 `COGNEE_API_KEY`만 요청한다.
-
-### 연결값이 없을 때 안내
-
-`remote` 또는 `hybrid` mode에 필요한 값이 없으면, URL과 dataset은 묻지 않고 자동으로 채운다. 검사에서 확정한 프로젝트 루트의 절대 경로를 넣는다. 예: 프로젝트 루트가 `/work/app`이면 파일은 `/work/app/.envrc`, `/work/app/.envrc.local`이고 dataset은 `app`이다.
-
-agent는 기존 내용을 보존하며 `.envrc`, `.envrc.local`, `.gitignore`에 필요한 항목을 합친다. Git worktree에서는 먼저 `.gitignore`에 `.envrc.local`을 넣는다. `.envrc.local`이 없으면 만들고, 있으면 기존 내용을 보존한다. `COGNEE_API_KEY` 정의가 없을 때만 사용자가 바로 바꿀 수 있는 자리표시자를 추가한다. `<project-root-name>`은 실제 폴더명으로 바꾼다.
-
-API key는 Tailscale auth key가 아니다. Cognee server API 인증 secret이다. `.envrc.local`에만 두며 `.envrc`, Git, 대화, 로그에 넣지 않는다.
-
-```bash
-# <프로젝트 루트>/.envrc
-export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
-export COGNEE_PLUGIN_DATASET="<project-root-name>"
-
-if [ -f .envrc.local ]; then
-  source .envrc.local
-fi
-```
-
-```bash
-# <프로젝트 루트>/.envrc.local — git ignore
-export COGNEE_API_KEY="API키를 입력하세요"
-```
-
-답변 끝에는 다음 행동을 정확히 제시한다: “Bagelcode 1Password에서 `cognee`를 검색해 `<프로젝트 루트>/.envrc.local`의 `API키를 입력하세요`를 실제 API key로 바꾼 뒤 ‘key 저장 완료’라고 알려 주세요. 그러면 health·쓰기·읽기를 검증합니다.”
-
-| 파일 | 내용 |
-| --- | --- |
-| `.envrc` | 공개 URL, dataset, OpenCode alias, `.envrc.local` load |
-| `.envrc.local` | API key, LLM key, MCP bearer token 같은 secret |
-| `.gitignore` | `.envrc.local`과 secret이 든 client 설정 |
-
-`remote` mode의 기본값은 다음과 같다.
-
-```bash
-export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
-export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
-export COGNEE_PLUGIN_DATASET="<agent가 확정한 프로젝트 루트 폴더명>"
-
-if [ -f .envrc.local ]; then
-  source .envrc.local
-fi
-```
-
-```bash
-export COGNEE_API_KEY="API키를 입력하세요"
-```
-
-`COGNEE_SERVICE_URL`은 OpenCode가 필요할 때만 넣는다.
-
-`mcp` mode에서는 `.envrc`에 `COGNEE_MCP_URL`과 `COGNEE_PLUGIN_DATASET`을 넣는다. REST API URL에 `/mcp`를 임의로 붙이지 않는다. Cognee MCP server가 실제로 제공하는 endpoint를 받는다. MCP endpoint 인증이 필요하면 `.envrc.local`에 `COGNEE_MCP_BEARER_TOKEN`을 두고 client의 secret 참조로 연결한다.
-
-`hybrid` mode에서는 `remote`와 `mcp`의 공개 설정을 모두 넣는다. 두 경로가 같은 Cognee backend, principal, dataset을 쓰게 맞춘다. REST API key와 MCP bearer token이 같다고 가정하지 않는다.
-
-`local` mode에서는 선택한 client 문서를 따른다. Claude와 Codex plugin은 로컬 runtime을 시작할 수 있다. OpenCode는 기본적으로 `http://localhost:8000`의 Cognee service가 따로 필요하다. generic MCP stdio는 `LLM_API_KEY`와 `cognee-mcp` 경로가 필요하다.
-
-Git worktree에서는 `.envrc`를 추적하고 `.envrc.local`을 ignore한다. Git이 아니면 두 파일을 프로젝트 루트에만 둔다.
-
-`--require-tailscale` 검사에 실패하면 동의를 받은 뒤 `brew install --cask tailscale`을 실행한다. 앱을 열고 Cognee server와 같은 tailnet에 로그인하도록 안내한다.
-
-## 4. client adapter 설치
-
-[references/clients.md](references/clients.md)의 선택한 절만 따라 설치하고 설정한다. 기존 설정을 덮어쓰지 말고 Cognee 항목만 합친다. secret을 추적 파일에 쓰지 않는다.
-
-설치 후 같은 client로 check를 다시 실행한다. `RESULT OK`는 로컬 설정 검사만 통과했다는 뜻이다.
-
-## 5. 적용과 검증
-
-direnv가 있으면 다음을 실행한다.
-
-```bash
-direnv allow <프로젝트 루트>
-```
-
-없으면 프로젝트 루트에서 `source .envrc` 후 client를 새로 시작하도록 안내한다.
-
-다음 순서로 실제 동작을 검증한다.
+다음 순서로 검증한다.
 
 | 단계 | 완료 조건 |
 | --- | --- |
-| 연결 | REST `/health` 또는 client의 MCP 상태가 정상 |
-| 쓰기 | project dataset에 고유한 test memory 저장 |
-| 읽기 | 같은 client가 test memory recall |
-| 공유 | 여러 client를 설정했다면 다른 client가 같은 dataset에서 recall |
+| 연결 | client에서 Cognee MCP가 connected |
+| 쓰기 | 계산한 dataset에 고유 test memory 저장 |
+| 읽기 | 같은 client가 같은 dataset에서 recall |
+| 공유 | 다른 client가 같은 dataset에서 recall |
 
-API key와 test memory 원문을 로그에 출력하지 않는다. 모든 검증을 통과해야 완료로 보고한다. 실패하면 client, mode, 남은 작업만 짧게 적는다.
+test memory 원문은 로그에 쓰지 않는다. 실패하면 client, 단계, 남은 작업만 짧게 적는다.
+
+## 6. server 조건
+
+Cognee server에서 다음 값을 적용하고 재시작한다. 이 값은 server 서비스 설정에 두며 프로젝트 env 파일에 두지 않는다.
+
+```text
+ENABLE_BACKEND_ACCESS_CONTROL=false
+REQUIRE_AUTHENTICATION=false
+```
+
+Cognee는 loopback에 bind하고 Tailscale Serve로만 연다. 그 뒤 Tailscale grant 또는 ACL의 `src`를 허용할 device의 Tailscale IP `/32`나 전용 tag로 제한하고, `dst`를 Cognee server와 HTTPS port로 제한한다.
+
+IP만 앱에서 검사하지 않는다. Tailscale 정책의 device, user, tag 조건을 쓴다. Serve identity header는 user 식별용이라 exact device allowlist의 대체가 아니다.

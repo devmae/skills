@@ -8,6 +8,7 @@ PROJECT="$TEST_ROOT/project"
 FAKE_HOME="$TEST_ROOT/home"
 FAKE_BIN="$TEST_ROOT/bin"
 NODE_BIN="$(node -p 'process.execPath')"
+FIXED_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 
 cleanup() {
   rm -rf "$TEST_ROOT"
@@ -16,70 +17,91 @@ trap cleanup EXIT
 
 mkdir -p \
   "$PROJECT/.agents" \
-  "$FAKE_HOME/.claude/plugins/marketplaces/cognee" \
   "$FAKE_HOME/.gemini/config" \
   "$FAKE_BIN"
 
-cat > "$PROJECT/.envrc" <<'EOF'
-export COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
-export COGNEE_MCP_URL="https://cognee.example/mcp"
-export COGNEE_SERVICE_URL="${COGNEE_BASE_URL}"
-export COGNEE_PLUGIN_DATASET="project"
-
-if [ -f .envrc.local ]; then
-  source .envrc.local
-fi
-EOF
-
-cat > "$PROJECT/.envrc.local" <<'EOF'
-export COGNEE_API_KEY="fixture-secret"
-export LLM_API_KEY="fixture-llm-secret"
-EOF
-
-cat > "$PROJECT/opencode.json" <<'EOF'
+cat > "$PROJECT/opencode.json" <<EOF
 {
-  "plugin": ["@cognee/cognee-opencode"],
+  "\$schema": "https://opencode.ai/config.json",
   "mcp": {
     "servers": {
       "cognee": {
-        "type": "remote",
-        "url": "{env:COGNEE_MCP_URL}"
+        "type": "local",
+        "command": [
+          "uvx",
+          "cognee-mcp",
+          "--api-url",
+          "$FIXED_URL"
+        ]
       }
     }
   }
 }
 EOF
 
-cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 {
   "mcpServers": {
     "cognee": {
-      "serverUrl": "https://cognee.example/mcp"
+      "command": "uvx",
+      "args": [
+        "cognee-mcp",
+        "--api-url",
+        "$FIXED_URL"
+      ]
     }
   }
 }
 EOF
 
-cat > "$FAKE_BIN/claude" <<'EOF'
+cat > "$FAKE_BIN/claude" <<EOF
 #!/usr/bin/env bash
-case "$*" in
-  "plugin list") echo "cognee-memory@cognee" ;;
-  "mcp list") echo "cognee: connected" ;;
+case "\$*" in
+  "mcp get cognee")
+    echo "command: uvx"
+    echo "args: cognee-mcp --api-url $FIXED_URL"
+    ;;
+  "plugin list")
+    [ "\${COGNEE_TEST_NATIVE_PLUGIN:-0}" = "1" ] && echo "cognee-memory@cognee"
+    ;;
 esac
 EOF
 
-cat > "$FAKE_BIN/codex" <<'EOF'
+cat > "$FAKE_BIN/codex" <<EOF
 #!/usr/bin/env bash
-case "$*" in
-  "plugin list") echo "cognee@cognee  installed, enabled  1.1.0" ;;
-  "features list") echo "hooks stable true" ;;
-  "mcp list") echo "cognee  https://cognee.example/mcp  enabled" ;;
+case "\$*" in
+  "mcp get cognee")
+    echo "command: uvx"
+    echo "args: cognee-mcp --api-url $FIXED_URL"
+    ;;
+  "plugin list")
+    [ "\${COGNEE_TEST_NATIVE_PLUGIN:-0}" = "1" ] && echo "cognee@cognee"
+    ;;
 esac
 EOF
 
 cat > "$FAKE_BIN/opencode" <<'EOF'
 #!/usr/bin/env bash
 exit 0
+EOF
+
+cat > "$FAKE_BIN/tailscale" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "status" ]
+EOF
+
+cat > "$FAKE_BIN/uvx" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+
+cat > "$FAKE_BIN/curl" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *api/v1/datasets*) printf '%s' "${COGNEE_TEST_DATASETS_CODE:-200}" ;;
+  *health*) printf '%s' "${COGNEE_TEST_HEALTH_CODE:-200}" ;;
+  *) printf '000' ;;
+esac
 EOF
 
 cat > "$FAKE_BIN/folder-picker" <<'EOF'
@@ -96,6 +118,9 @@ chmod +x \
   "$FAKE_BIN/claude" \
   "$FAKE_BIN/codex" \
   "$FAKE_BIN/opencode" \
+  "$FAKE_BIN/tailscale" \
+  "$FAKE_BIN/uvx" \
+  "$FAKE_BIN/curl" \
   "$FAKE_BIN/folder-picker" \
   "$FAKE_BIN/cygpath"
 
@@ -132,14 +157,19 @@ expect_fail_with() {
   fi
 }
 
-expect_ok "Claude native remote" --client claude --mode remote
-expect_ok "Codex native remote" --client codex --mode remote
-expect_ok "OpenCode native remote" --client opencode --mode remote
-expect_ok "Claude MCP" --client claude --mode mcp
-expect_ok "Codex MCP" --client codex --mode mcp
-expect_ok "OpenCode MCP" --client opencode --mode mcp
-expect_ok "Antigravity MCP" --client antigravity --mode mcp
-expect_ok "native와 MCP hybrid" --client claude,antigravity --mode auto
+expect_ok "Claude keyless remote" --client claude --mode remote
+expect_ok "Codex keyless remote" --client codex --mode remote
+expect_ok "OpenCode keyless remote" --client opencode --mode remote
+expect_ok "Antigravity keyless remote" --client antigravity --mode remote
+expect_ok "여러 client keyless remote" --client claude,codex,opencode,antigravity --mode auto
+expect_ok "keyless REST probe" --client claude --mode remote --probe
+
+if [ ! -e "$PROJECT/.envrc" ] && [ ! -e "$PROJECT/.envrc.local" ]; then
+  printf 'PASS  프로젝트 env 파일 불필요\n'
+else
+  printf 'FAIL  프로젝트 env 파일이 생김\n' >&2
+  exit 1
+fi
 
 if output="$(
   PATH="$FAKE_BIN:/usr/bin:/bin" \
@@ -175,34 +205,10 @@ expect_fail_with \
   --client claude \
   --mode remote
 
-cp "$PROJECT/.envrc" "$TEST_ROOT/.envrc.valid"
-sed 's#https://kimtaehwan-macmini.tail9f3ac8.ts.net/#https://wrong.example/#' \
-  "$TEST_ROOT/.envrc.valid" > "$PROJECT/.envrc"
 expect_fail_with \
-  "고정 Cognee URL과 다른 값 거부" \
-  "COGNEE_BASE_URL 값이 맞지 않음" \
+  "예전 mode 거부" \
+  "지원하지 않는 mode: hybrid" \
   --client claude \
-  --mode remote
-
-sed 's/COGNEE_PLUGIN_DATASET="project"/COGNEE_PLUGIN_DATASET="wrong"/' \
-  "$TEST_ROOT/.envrc.valid" > "$PROJECT/.envrc"
-expect_fail_with \
-  "프로젝트 폴더명과 다른 dataset 거부" \
-  "COGNEE_PLUGIN_DATASET 값이 맞지 않음" \
-  --client claude \
-  --mode remote
-cp "$TEST_ROOT/.envrc.valid" "$PROJECT/.envrc"
-
-expect_fail_with \
-  "MCP client의 remote mode 거부" \
-  "Antigravity와 generic MCP client는 --mode mcp 또는 hybrid가 필요함" \
-  --client antigravity \
-  --mode remote
-
-expect_fail_with \
-  "native client만 둔 hybrid 거부" \
-  "hybrid mode는 native client와 MCP client가 모두 필요함" \
-  --client claude,codex \
   --mode hybrid
 
 expect_fail_with \
@@ -211,42 +217,76 @@ expect_fail_with \
   --client "" \
   --mode remote
 
-cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
-{
-  "mcpServers": {
-    "cognee": {}
-  }
-}
-EOF
+if output="$(
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+    COGNEE_CHECK_HOME="$FAKE_HOME" \
+    COGNEE_TEST_DATASETS_CODE=401 \
+    bash "$CHECK_SCRIPT" "$PROJECT" --client claude --mode remote --probe 2>&1
+)"; then
+  printf 'FAIL  server 앱 인증을 찾아야 함\n' >&2
+  exit 1
+elif printf '%s\n' "$output" | grep -Fq "Cognee server 앱 인증이 켜져 있음"; then
+  printf 'PASS  server 앱 인증 탐지\n'
+else
+  printf 'FAIL  server 앱 인증 탐지 문구 없음\n%s\n' "$output" >&2
+  exit 1
+fi
 
+if output="$(
+  PATH="$FAKE_BIN:/usr/bin:/bin" \
+    COGNEE_CHECK_HOME="$FAKE_HOME" \
+    COGNEE_TEST_NATIVE_PLUGIN=1 \
+    bash "$CHECK_SCRIPT" "$PROJECT" --client claude --mode remote 2>&1
+)"; then
+  printf 'FAIL  native plugin을 찾아야 함\n' >&2
+  exit 1
+elif printf '%s\n' "$output" | grep -Fq "Claude native Cognee plugin이 남아 있음"; then
+  printf 'PASS  native plugin 탐지\n'
+else
+  printf 'FAIL  native plugin 탐지 문구 없음\n%s\n' "$output" >&2
+  exit 1
+fi
+
+cp "$PROJECT/opencode.json" "$TEST_ROOT/opencode.valid.json"
+sed "s#$FIXED_URL#https://wrong.example/#" \
+  "$TEST_ROOT/opencode.valid.json" > "$PROJECT/opencode.json"
 expect_fail_with \
-  "Antigravity transport 누락 거부" \
-  "serverUrl 또는 command가 필요함" \
-  --client antigravity \
-  --mode mcp
+  "OpenCode의 다른 URL 거부" \
+  "OpenCode keyless Cognee MCP 설정 없음" \
+  --client opencode \
+  --mode remote
+cp "$TEST_ROOT/opencode.valid.json" "$PROJECT/opencode.json"
 
-cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<'EOF'
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 {
   "mcpServers": {
     "cognee": {
-      "serverUrl": "not-a-url"
+      "command": "uvx",
+      "args": [
+        "cognee-mcp",
+        "--api-url",
+        "$FIXED_URL",
+        "--api-token",
+        "fixture"
+      ]
     }
   }
 }
 EOF
 
 expect_fail_with \
-  "Antigravity 잘못된 URL 거부" \
-  "serverUrl은 http 또는 https 절대 URL이어야 함" \
+  "Antigravity token 설정 거부" \
+  "인증 key 또는 token을 넣을 수 없음" \
   --client antigravity \
-  --mode mcp
+  --mode remote
 
 rm "$FAKE_HOME/.gemini/config/mcp_config.json"
-cat > "$PROJECT/.agents/mcp_config.json" <<'EOF'
+cat > "$PROJECT/.agents/mcp_config.json" <<EOF
 {
   "mcpServers": {
     "cognee": {
-      "serverUrl": "https://cognee.example/mcp"
+      "command": "uvx",
+      "args": ["cognee-mcp", "--api-url", "$FIXED_URL"]
     }
   }
 }
@@ -256,18 +296,6 @@ expect_fail_with \
   "Antigravity project-local 비지원" \
   "Antigravity Cognee MCP 설정 없음" \
   --client antigravity \
-  --mode mcp
-
-cat > "$FAKE_BIN/claude" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-chmod +x "$FAKE_BIN/claude"
-
-expect_fail_with \
-  "marketplace source를 설치로 오판하지 않음" \
-  "Claude cognee-memory plugin 미설치" \
-  --client claude \
   --mode remote
 
 echo "RESULT OK — check.sh fixture tests passed"

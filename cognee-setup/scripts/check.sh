@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Cognee client와 프로젝트별 환경 설정을 검사한다.
-# 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mode auto|remote|local|mcp|hybrid] [--require-tailscale]
+# API key와 프로젝트 env 파일 없이 쓰는 Cognee MCP bridge를 검사한다.
+# 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mode auto|remote] [--probe]
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -8,8 +8,11 @@ PROJECT_ROOT=""
 PICK_PROJECT_ROOT=0
 CLIENT_SPEC="auto"
 MODE="auto"
-REQUIRE_TAILSCALE=0
+PROBE=0
 FAILED=0
+PROBED=0
+
+FIXED_COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
@@ -22,8 +25,8 @@ Usage: check.sh [project-root|--pick] [options]
 Options:
   --pick                    OS folder picker로 프로젝트 루트 선택
   --client NAME[,NAME...]  auto, all, claude, codex, opencode, antigravity, mcp
-  --mode MODE              auto, remote, local, mcp, hybrid
-  --require-tailscale      Tailscale 설치와 연결을 필수로 검사
+  --mode MODE              auto, remote
+  --probe                   key 없이 원격 REST endpoint 검사
   -h, --help               도움말 출력
 EOF
 }
@@ -44,8 +47,12 @@ while [ "$#" -gt 0 ]; do
       MODE="$2"
       shift 2
       ;;
+    --probe)
+      PROBE=1
+      shift
+      ;;
     --require-tailscale)
-      REQUIRE_TAILSCALE=1
+      # 예전 호출과 호환한다. remote mode는 늘 Tailscale을 검사한다.
       shift
       ;;
     -h|--help)
@@ -107,69 +114,17 @@ if [ ! -d "$PROJECT_ROOT" ]; then
 fi
 
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)"
-ENVRC="$PROJECT_ROOT/.envrc"
-ENVRC_LOCAL="$PROJECT_ROOT/.envrc.local"
-CHECK_HOME="${COGNEE_CHECK_HOME:-$HOME}"
-FIXED_COGNEE_BASE_URL="https://kimtaehwan-macmini.tail9f3ac8.ts.net/"
 PROJECT_DATASET="$(basename "$PROJECT_ROOT")"
+CHECK_HOME="${COGNEE_CHECK_HOME:-$HOME}"
 
 case "$MODE" in
-  auto|remote|local|mcp|hybrid) ;;
+  auto) MODE="remote" ;;
+  remote) ;;
   *)
     printf 'ERROR 지원하지 않는 mode: %s\n' "$MODE" >&2
     exit 2
     ;;
 esac
-
-file_var_value() {
-  var_name="$1"
-  file_path="$2"
-  [ -f "$file_path" ] || return 1
-
-  line="$(grep -E "^[[:space:]]*export[[:space:]]+$var_name=" "$file_path" 2>/dev/null | tail -1)"
-  [ -n "$line" ] || return 1
-
-  value="$(printf '%s' "$line" \
-    | sed -E "s/^[[:space:]]*export[[:space:]]+$var_name=//" \
-    | sed -E 's/[[:space:]]*#.*$//' \
-    | sed -E "s/^[\"']//; s/[\"']$//")"
-  [ -n "$value" ] || return 1
-  printf '%s' "$value"
-}
-
-check_var_in_file() {
-  var_name="$1"
-  file_path="$2"
-  label="$3"
-
-  if value="$(file_var_value "$var_name" "$file_path")"; then
-    pass "$var_name ${label}에 정의됨"
-    return 0
-  fi
-
-  fail "$var_name 미설정 (${label}에 필요)"
-  return 1
-}
-
-check_var_equals() {
-  var_name="$1"
-  file_path="$2"
-  label="$3"
-  expected="$4"
-
-  if ! value="$(file_var_value "$var_name" "$file_path")"; then
-    fail "$var_name 미설정 (${label}에 필요)"
-    return 1
-  fi
-
-  if [ "$value" = "$expected" ]; then
-    pass "$var_name ${label} 값 확인됨"
-    return 0
-  fi
-
-  fail "$var_name 값이 맞지 않음 (${label}에서 $expected 필요)"
-  return 1
-}
 
 contains_client() {
   case " $CLIENTS " in
@@ -194,14 +149,6 @@ detect_clients() {
     add_client antigravity
   fi
   [ -n "$CLIENTS" ] || add_client mcp
-}
-
-has_native_client() {
-  contains_client claude || contains_client codex || contains_client opencode
-}
-
-has_mcp_client() {
-  contains_client antigravity || contains_client mcp
 }
 
 CLIENTS=""
@@ -229,40 +176,13 @@ if [ -z "$CLIENTS" ]; then
   exit 2
 fi
 
-if [ "$MODE" = "auto" ]; then
-  if has_native_client && has_mcp_client; then
-    MODE="hybrid"
-  elif file_var_value COGNEE_BASE_URL "$ENVRC" >/dev/null 2>&1 \
-    && file_var_value COGNEE_MCP_URL "$ENVRC" >/dev/null 2>&1; then
-    MODE="hybrid"
-  elif file_var_value COGNEE_BASE_URL "$ENVRC" >/dev/null 2>&1; then
-    MODE="remote"
-  elif file_var_value COGNEE_MCP_URL "$ENVRC" >/dev/null 2>&1; then
-    MODE="mcp"
-  elif file_var_value LLM_API_KEY "$ENVRC_LOCAL" >/dev/null 2>&1; then
-    MODE="local"
-  elif contains_client antigravity || { contains_client mcp && [ "$CLIENTS" = "mcp" ]; }; then
-    MODE="mcp"
-  else
-    MODE="remote"
-  fi
-  info "mode 자동 선택: $MODE"
-fi
-
 info "프로젝트: $PROJECT_ROOT"
 info "client: $CLIENTS"
 info "mode: $MODE"
+info "Cognee URL: $FIXED_COGNEE_BASE_URL"
+info "dataset: $PROJECT_DATASET"
 
-if [ "$MODE" = "remote" ] && has_mcp_client; then
-  fail "Antigravity와 generic MCP client는 --mode mcp 또는 hybrid가 필요함"
-fi
-
-if [ "$MODE" = "hybrid" ] && { ! has_native_client || ! has_mcp_client; }; then
-  fail "hybrid mode는 native client와 MCP client가 모두 필요함"
-fi
-
-# Tailscale은 private tailnet을 쓸 때만 필수다.
-if [ "$REQUIRE_TAILSCALE" -eq 1 ]; then
+check_tailscale() {
   TS_BIN=""
   if command -v tailscale >/dev/null 2>&1; then
     TS_BIN="tailscale"
@@ -274,12 +194,42 @@ if [ "$REQUIRE_TAILSCALE" -eq 1 ]; then
     fail "tailscale 미설치"
   elif "$TS_BIN" status >/dev/null 2>&1; then
     pass "tailscale 연결됨"
-    peers="$("$TS_BIN" status 2>/dev/null | awk '$1 ~ /^[0-9]/ && $2 != "" {print $2}' | head -10 | tr '\n' ' ')"
-    [ -n "$peers" ] && info "tailnet 머신: $peers"
   else
     fail "tailscale 실행 또는 로그인 필요"
   fi
-fi
+}
+
+check_uvx() {
+  if command -v uvx >/dev/null 2>&1; then
+    pass "uvx 설치됨"
+  else
+    fail "uvx 미설치"
+  fi
+}
+
+has_forbidden_auth() {
+  printf '%s\n' "$1" | grep -Eqi -- \
+    'api-token|serve-api-key|bearer-token|authorization[[:space:]]*[:=]|api[_-]?key'
+}
+
+check_bridge_text() {
+  output="$1"
+  label="$2"
+
+  if ! printf '%s\n' "$output" | grep -Fq 'uvx'; then
+    fail "$label command에 uvx가 없음"
+  elif ! printf '%s\n' "$output" | grep -Fq 'cognee-mcp'; then
+    fail "$label command에 cognee-mcp가 없음"
+  elif ! printf '%s\n' "$output" | grep -Fq -- '--api-url'; then
+    fail "$label command에 --api-url이 없음"
+  elif ! printf '%s\n' "$output" | grep -Fq "$FIXED_COGNEE_BASE_URL"; then
+    fail "$label Cognee URL이 고정값과 다름"
+  elif has_forbidden_auth "$output"; then
+    fail "$label 설정에 인증 key 또는 token이 있음"
+  else
+    pass "$label keyless MCP bridge 설정됨"
+  fi
+}
 
 check_claude() {
   if ! command -v claude >/dev/null 2>&1; then
@@ -288,26 +238,14 @@ check_claude() {
   fi
   pass "Claude Code CLI 설치됨"
 
+  mcp_output="$(claude mcp get cognee 2>/dev/null || true)"
+  check_bridge_text "$mcp_output" "Claude"
+
   plugin_output="$(claude plugin list 2>/dev/null || true)"
   if printf '%s\n' "$plugin_output" | grep -Eqi 'cognee-memory(@cognee)?'; then
-    pass "Claude cognee-memory plugin 설치됨"
+    fail "Claude native Cognee plugin이 남아 있음"
   else
-    fail "Claude cognee-memory plugin 미설치"
-  fi
-}
-
-check_claude_mcp() {
-  if ! command -v claude >/dev/null 2>&1; then
-    fail "Claude Code CLI 미설치"
-    return
-  fi
-  pass "Claude Code CLI 설치됨"
-
-  mcp_output="$(claude mcp list 2>/dev/null || true)"
-  if printf '%s\n' "$mcp_output" | grep -Eqi '(^|[[:space:]])cognee([: ]|$)'; then
-    pass "Claude Cognee MCP 설정됨"
-  else
-    fail "Claude Cognee MCP 설정 없음"
+    pass "Claude native Cognee plugin 없음"
   fi
 }
 
@@ -318,33 +256,14 @@ check_codex() {
   fi
   pass "Codex CLI 설치됨"
 
+  mcp_output="$(codex mcp get cognee 2>/dev/null || true)"
+  check_bridge_text "$mcp_output" "Codex"
+
   plugin_output="$(codex plugin list 2>/dev/null || true)"
-  if printf '%s\n' "$plugin_output" | grep -Eqi 'cognee@cognee[[:space:]]+installed,[[:space:]]*enabled'; then
-    pass "Codex cognee plugin 설치되고 활성화됨"
+  if printf '%s\n' "$plugin_output" | grep -Eqi 'cognee@cognee'; then
+    fail "Codex native Cognee plugin이 남아 있음"
   else
-    fail "Codex cognee plugin 미설치 또는 비활성"
-  fi
-
-  feature_output="$(codex features list 2>/dev/null || true)"
-  if printf '%s\n' "$feature_output" | grep -Eq '^hooks[[:space:]].*[[:space:]]true[[:space:]]*$'; then
-    pass "Codex hooks 활성화됨"
-  else
-    fail "Codex hooks 비활성"
-  fi
-}
-
-check_codex_mcp() {
-  if ! command -v codex >/dev/null 2>&1; then
-    fail "Codex CLI 미설치"
-    return
-  fi
-  pass "Codex CLI 설치됨"
-
-  mcp_output="$(codex mcp list 2>/dev/null || true)"
-  if printf '%s\n' "$mcp_output" | grep -Eqi '^cognee([[:space:]]|$)'; then
-    pass "Codex Cognee MCP 설정됨"
-  else
-    fail "Codex Cognee MCP 설정 없음"
+    pass "Codex native Cognee plugin 없음"
   fi
 }
 
@@ -363,39 +282,25 @@ check_opencode() {
     "$PROJECT_ROOT/opencode.jsonc" \
     "$PROJECT_ROOT/.opencode/opencode.json" \
     "$CHECK_HOME/.config/opencode/opencode.json"; do
-    if [ -f "$config_path" ] && grep -Fq '@cognee/cognee-opencode' "$config_path"; then
-      pass "OpenCode Cognee plugin 설정됨 ($config_path)"
-      config_found=1
+    [ -f "$config_path" ] || continue
+    if grep -Eq '"mcp"[[:space:]]*:' "$config_path" \
+      && grep -Eqi '"cognee"[[:space:]]*:' "$config_path" \
+      && grep -Fq '"uvx"' "$config_path" \
+      && grep -Fq '"cognee-mcp"' "$config_path" \
+      && grep -Fq '"--api-url"' "$config_path" \
+      && grep -Fq "$FIXED_COGNEE_BASE_URL" "$config_path"; then
+      if has_forbidden_auth "$(sed -n '/"cognee"[[:space:]]*:/,/^[[:space:]]*}[,]*/p' "$config_path")"; then
+        fail "OpenCode Cognee 설정에 인증 key 또는 token이 있음 ($config_path)"
+      elif grep -Fq '@cognee/cognee-opencode' "$config_path"; then
+        fail "OpenCode native Cognee plugin이 남아 있음 ($config_path)"
+      else
+        pass "OpenCode keyless MCP bridge 설정됨 ($config_path)"
+        config_found=1
+      fi
       break
     fi
   done
-  [ "$config_found" -eq 1 ] || fail "OpenCode Cognee plugin 설정 없음"
-}
-
-check_opencode_mcp() {
-  if command -v opencode >/dev/null 2>&1; then
-    pass "OpenCode CLI 설치됨 (opencode)"
-  elif command -v opencode2 >/dev/null 2>&1; then
-    pass "OpenCode CLI 설치됨 (opencode2)"
-  else
-    fail "OpenCode CLI 미설치"
-  fi
-
-  config_found=0
-  for config_path in \
-    "$PROJECT_ROOT/opencode.json" \
-    "$PROJECT_ROOT/opencode.jsonc" \
-    "$PROJECT_ROOT/.opencode/opencode.json" \
-    "$CHECK_HOME/.config/opencode/opencode.json"; do
-    if [ -f "$config_path" ] \
-      && grep -Eq '"mcp"[[:space:]]*:' "$config_path" \
-      && grep -Eqi '"cognee"[[:space:]]*:' "$config_path"; then
-      pass "OpenCode Cognee MCP 설정됨 ($config_path)"
-      config_found=1
-      break
-    fi
-  done
-  [ "$config_found" -eq 1 ] || fail "OpenCode Cognee MCP 설정 없음"
+  [ "$config_found" -eq 1 ] || fail "OpenCode keyless Cognee MCP 설정 없음"
 }
 
 validate_antigravity_config() {
@@ -406,12 +311,11 @@ validate_antigravity_config() {
     return 1
   fi
 
-  python3 - "$config_path" <<'PY'
+  python3 - "$config_path" "$FIXED_COGNEE_BASE_URL" <<'PY'
 import json
 import sys
-from urllib.parse import urlparse
 
-path = sys.argv[1]
+path, expected_url = sys.argv[1:3]
 try:
     with open(path, encoding="utf-8") as file:
         config = json.load(file)
@@ -419,30 +323,31 @@ except (OSError, json.JSONDecodeError):
     print("JSON 형식 오류")
     raise SystemExit(1)
 
-if not isinstance(config, dict):
-    print("최상위 JSON 객체가 필요함")
-    raise SystemExit(1)
-
-servers = config.get("mcpServers")
+servers = config.get("mcpServers") if isinstance(config, dict) else None
 server = servers.get("cognee") if isinstance(servers, dict) else None
 if not isinstance(server, dict):
     print("mcpServers.cognee 객체가 필요함")
     raise SystemExit(1)
 
-server_url = server.get("serverUrl")
-command = server.get("command")
-has_command = isinstance(command, str) and bool(command.strip())
-has_url = isinstance(server_url, str) and bool(server_url.strip())
-
-if has_url:
-    parsed = urlparse(server_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        print("serverUrl은 http 또는 https 절대 URL이어야 함")
-        raise SystemExit(1)
-
-if not has_url and not has_command:
-    print("serverUrl 또는 command가 필요함")
+if server.get("command") != "uvx":
+    print("command는 uvx여야 함")
     raise SystemExit(1)
+
+args = server.get("args")
+if not isinstance(args, list) or not all(isinstance(value, str) for value in args):
+    print("args 문자열 배열이 필요함")
+    raise SystemExit(1)
+
+required = ["cognee-mcp", "--api-url", expected_url]
+if any(value not in args for value in required):
+    print("cognee-mcp, --api-url, 고정 URL이 필요함")
+    raise SystemExit(1)
+
+serialized = json.dumps(server).lower()
+for forbidden in ("api-token", "serve-api-key", "bearer-token", "authorization", "api_key", "api-key"):
+    if forbidden in serialized:
+        print("인증 key 또는 token을 넣을 수 없음")
+        raise SystemExit(1)
 PY
 }
 
@@ -460,114 +365,63 @@ check_antigravity() {
   fi
 
   if validation_error="$(validate_antigravity_config "$config_path" 2>&1)"; then
-    pass "Antigravity Cognee MCP 설정됨 ($config_path)"
+    pass "Antigravity keyless MCP bridge 설정됨 ($config_path)"
   else
     fail "Antigravity Cognee MCP 설정 오류 ($config_path): $validation_error"
   fi
 }
 
+check_server() {
+  if ! command -v curl >/dev/null 2>&1; then
+    fail "server probe에 curl이 필요함"
+    return
+  fi
+
+  health_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+    --connect-timeout 5 --max-time 15 \
+    "${FIXED_COGNEE_BASE_URL}health" 2>/dev/null || true)"
+  case "$health_code" in
+    2??) pass "Cognee health 응답 정상" ;;
+    *) fail "Cognee health 실패 (HTTP ${health_code:-000})" ;;
+  esac
+
+  datasets_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+    --connect-timeout 5 --max-time 15 \
+    "${FIXED_COGNEE_BASE_URL}api/v1/datasets" 2>/dev/null || true)"
+  case "$datasets_code" in
+    2??) pass "Cognee REST가 key 없이 응답함" ;;
+    401|403) fail "Cognee server 앱 인증이 켜져 있음 (HTTP $datasets_code)" ;;
+    *) fail "Cognee datasets probe 실패 (HTTP ${datasets_code:-000})" ;;
+  esac
+}
+
+check_tailscale
+check_uvx
+
 for client in $CLIENTS; do
   case "$client" in
-    claude)
-      if [ "$MODE" = "mcp" ]; then check_claude_mcp; else check_claude; fi
-      ;;
-    codex)
-      if [ "$MODE" = "mcp" ]; then check_codex_mcp; else check_codex; fi
-      ;;
-    opencode)
-      if [ "$MODE" = "mcp" ]; then check_opencode_mcp; else check_opencode; fi
-      ;;
+    claude) check_claude ;;
+    codex) check_codex ;;
+    opencode) check_opencode ;;
     antigravity) check_antigravity ;;
-    mcp) info "generic MCP client는 client별 설정과 연결 상태를 따로 확인해야 함" ;;
+    mcp) info "generic MCP client는 같은 uvx command 등록을 직접 확인해야 함" ;;
   esac
 done
 
-for var_name in COGNEE_BASE_URL COGNEE_MCP_URL COGNEE_API_KEY COGNEE_MCP_BEARER_TOKEN COGNEE_PLUGIN_DATASET LLM_API_KEY; do
-  if [ -n "$(printenv "$var_name" 2>/dev/null || true)" ]; then
-    info "현재 shell의 $var_name 값은 판정에서 제외함"
-  fi
-done
-
-case "$MODE" in
-  remote)
-    check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
-    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
-    if contains_client opencode; then
-      check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
-    fi
-    ;;
-  hybrid)
-    check_var_equals COGNEE_BASE_URL "$ENVRC" ".envrc" "$FIXED_COGNEE_BASE_URL"
-    check_var_in_file COGNEE_MCP_URL "$ENVRC" ".envrc"
-    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    check_var_in_file COGNEE_API_KEY "$ENVRC_LOCAL" ".envrc.local"
-    if contains_client opencode; then
-      check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
-    fi
-    ;;
-  local)
-    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    if contains_client claude \
-      || contains_client codex \
-      || contains_client antigravity \
-      || contains_client mcp; then
-      check_var_in_file LLM_API_KEY "$ENVRC_LOCAL" ".envrc.local"
-    fi
-    if contains_client opencode; then
-      check_var_in_file COGNEE_SERVICE_URL "$ENVRC" ".envrc"
-    fi
-    ;;
-  mcp)
-    check_var_in_file COGNEE_MCP_URL "$ENVRC" ".envrc"
-    check_var_equals COGNEE_PLUGIN_DATASET "$ENVRC" ".envrc" "$PROJECT_DATASET"
-    if ! contains_client antigravity && ! contains_client mcp; then
-      info "native client에 MCP를 선택함 — 자동 capture는 native plugin보다 적을 수 있음"
-    fi
-    ;;
-esac
-
-if [ -f "$ENVRC" ]; then
-  if grep -Eq '^[[:space:]]*export[[:space:]]+(COGNEE_API_KEY|COGNEE_MCP_BEARER_TOKEN|LLM_API_KEY)=' "$ENVRC"; then
-    fail "secret이 .envrc에 있음 — .envrc.local로 옮겨야 함"
-  fi
-  if grep -Eq "^[[:space:]]*(source|\\.)[[:space:]]+.*\\.envrc\\.local" "$ENVRC"; then
-    pass ".envrc가 .envrc.local을 불러옴"
-  else
-    fail ".envrc가 .envrc.local을 불러오지 않음"
-  fi
-fi
-
-if [ -f "$ENVRC" ]; then
-  if command -v git >/dev/null 2>&1 \
-    && git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if git -C "$PROJECT_ROOT" check-ignore -q .envrc 2>/dev/null; then
-      fail ".envrc가 git ignore됨"
-    elif git -C "$PROJECT_ROOT" ls-files --error-unmatch -- .envrc >/dev/null 2>&1; then
-      pass ".envrc가 git에 추적됨"
-    else
-      fail ".envrc가 git에 추적되지 않음"
-    fi
-
-    if git -C "$PROJECT_ROOT" check-ignore -q .envrc.local 2>/dev/null; then
-      pass ".envrc.local이 git ignore됨"
-    else
-      fail ".envrc.local이 git ignore되지 않음"
-    fi
-  else
-    info "Git worktree가 아님"
-  fi
-
-  if command -v direnv >/dev/null 2>&1; then
-    info "direnv 설치됨 — 변경 후 direnv allow 필요"
-  else
-    info "direnv 미설치 — client 실행 전 source .envrc 필요"
-  fi
+if [ "$PROBE" -eq 1 ]; then
+  PROBED=1
+  check_server
+else
+  info "server probe 생략 — 전체 검증에는 --probe 필요"
 fi
 
 printf '%s\n' "----------------------------------------------------------"
 if [ "$FAILED" -eq 0 ]; then
-  echo "RESULT OK — Cognee 로컬 설정 검사 통과"
+  if [ "$PROBED" -eq 1 ]; then
+    echo "RESULT OK — Cognee keyless 설정과 server probe 통과"
+  else
+    echo "RESULT OK — Cognee keyless 로컬 설정 통과, server probe 생략"
+  fi
   exit 0
 fi
 
