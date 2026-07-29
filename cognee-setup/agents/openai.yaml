@@ -1,4 +1,4 @@
 interface:
   display_name: "Cognee Setup"
-  short_description: "API key 없이 Tailscale로 Cognee 연결"
-  default_prompt: "Use $cognee-setup to connect this project to Cognee over Tailscale without an API key or project env files."
+  short_description: "user scope 전용 keyless Cognee 연결"
+  default_prompt: "Use $cognee-setup to connect this project to Cognee in user scope over Tailscale without an API key."
