@@ -1,11 +1,11 @@
 ---
 name: cognee-setup
-description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigravity와 그 밖의 MCP client가 Tailscale의 원격 Cognee memory를 API key나 프로젝트 env 파일 없이 쓰도록 점검하고 설정한다. Git 저장소가 아닌 폴더도 지원한다. 사용자가 "cognee 셋업", "cognee 체크", "cognee 환경 확인", "cognee 되는지 봐줘", "기억 서버 연결", "여러 agent에서 기억 공유" 등을 요청할 때 사용한다.
+description: 지정한 프로젝트에서 Claude Code, Codex, OpenCode, Antigravity와 그 밖의 MCP client가 Tailscale의 원격 Cognee memory를 user scope에서만, API key나 프로젝트 env 파일 없이 쓰도록 점검하고 설정한다. Git 저장소가 아닌 폴더도 지원한다. 사용자가 "cognee 셋업", "cognee 체크", "cognee 환경 확인", "cognee 되는지 봐줘", "기억 서버 연결", "여러 agent에서 기억 공유" 등을 요청할 때 사용한다.
 ---
 
 # Cognee Setup
 
-API key와 프로젝트 env 파일 없이 Cognee를 연결한다. 원격 주소는 스킬에 고정하고 dataset은 프로젝트 폴더명으로 계산한다.
+API key와 프로젝트 env 파일 없이 Cognee를 연결한다. MCP server는 client에 상관없이 user scope에만 등록한다. 원격 주소는 스킬에 고정하고 dataset은 프로젝트 폴더명으로 계산한다.
 
 ## 1. 범위 확정
 
@@ -38,10 +38,13 @@ keyless remote mode에서는 native Cognee plugin을 쓰지 않는다. 현재 na
 | Cognee REST URL | `https://kimtaehwan-macmini.tail9f3ac8.ts.net/` |
 | dataset | 확정한 프로젝트 루트의 폴더명 |
 | 인증 | Tailscale grant 또는 ACL |
+| MCP 등록 scope | user만 허용 |
 
 예: `/work/my-project`의 dataset은 `my-project`다.
 
 프로젝트 env 파일을 만들거나 읽지 않는다. Cognee API key를 만들거나 읽거나 client에 넘기지 않는다. 기존 프로젝트 파일도 이 스킬의 판정 근거로 쓰지 않는다.
+
+프로젝트·local·workspace scope에 `cognee` MCP 설정을 만들지 않는다. 기존 설정이 있으면 user scope로 옮긴 뒤 지운다. 다른 MCP 설정은 보존한다. client가 user scope를 지원하지 않거나 구분할 수 없으면 설정하지 말고 실패로 보고한다.
 
 remote server는 앱 인증을 꺼야 한다. Tailscale에서 server 접근을 허용할 device, user, tag만 제한한다. public network에 Cognee port를 열지 않는다.
 
@@ -70,7 +73,7 @@ uvx cognee-mcp \
 
 token 인자를 추가하지 않는다. URL 뒤에 `/mcp`도 붙이지 않는다. bridge가 REST API를 MCP tool로 바꾼다.
 
-각 client 설정은 [references/clients.md](references/clients.md)를 따른다. 기존 설정을 보존하고 `cognee` 항목만 합친다. native Cognee plugin이 켜져 있으면 중복 저장과 key 발급을 막기 위해 끄거나 지운다.
+각 client 설정은 [references/clients.md](references/clients.md)를 따른다. user 설정의 기존 값을 보존하고 `cognee` 항목만 합친다. 프로젝트·local·workspace 설정의 `cognee` 항목은 지운다. native Cognee plugin이 켜져 있으면 중복 저장과 key 발급을 막기 위해 끄거나 지운다.
 
 agent에게 다음 규칙을 준다.
 
@@ -91,9 +94,9 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 `--probe`는 key 없이 `/health`와 `/api/v1/datasets`를 호출한다. `401` 또는 `403`이면 server 앱 인증이 아직 켜진 상태다. 이때 client 설정을 반복하지 말고 server 설정을 고친다.
 
-`remote` mode는 Tailscale 연결, `uvx`, client MCP 등록, 고정 URL, token 인자 부재를 검사한다. `RESULT OK`는 설정과 keyless REST probe가 모두 통과했을 때만 쓴다.
+`remote` mode는 Tailscale 연결, `uvx`, user scope MCP 등록, project-local override 부재, 고정 URL, token 인자 부재를 검사한다. `RESULT OK`는 설정과 keyless REST probe가 모두 통과했을 때만 쓴다.
 
-generic MCP client는 설정 파일 경로도 준다.
+generic MCP client는 user scope 설정 파일의 절대 경로도 준다. 프로젝트 안의 경로는 거부한다.
 
 ```bash
 bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \

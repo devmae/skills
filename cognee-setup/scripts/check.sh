@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# API key와 프로젝트 env 파일 없이 쓰는 Cognee MCP bridge를 검사한다.
+# user scope에서 API key와 프로젝트 env 파일 없이 쓰는 Cognee MCP bridge를 검사한다.
 # 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mcp-config FILE] [--mode auto|remote] [--probe]
 set -u
 
@@ -26,7 +26,7 @@ Usage: check.sh [project-root|--pick] [options]
 Options:
   --pick                    OS folder picker로 프로젝트 루트 선택
   --client NAME[,NAME...]  auto, all, claude, codex, opencode, antigravity, mcp
-  --mcp-config FILE        generic MCP client의 JSON 설정 파일
+  --mcp-config FILE        generic MCP client의 user scope JSON 설정 파일
   --mode MODE              auto, remote
   --probe                   key 없이 원격 REST endpoint 검사
   -h, --help               도움말 출력
@@ -123,10 +123,13 @@ fi
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)"
 PROJECT_DATASET="$(basename "$PROJECT_ROOT")"
 CHECK_HOME="${COGNEE_CHECK_HOME:-$HOME}"
+if [ -d "$CHECK_HOME" ]; then
+  CHECK_HOME="$(cd "$CHECK_HOME" 2>/dev/null && pwd -P)"
+fi
 if [ -n "$GENERIC_MCP_CONFIG" ]; then
   case "$GENERIC_MCP_CONFIG" in
     /*) ;;
-    *) GENERIC_MCP_CONFIG="$PROJECT_ROOT/$GENERIC_MCP_CONFIG" ;;
+    *) GENERIC_MCP_CONFIG="$CHECK_HOME/$GENERIC_MCP_CONFIG" ;;
   esac
 fi
 
@@ -192,6 +195,7 @@ fi
 info "프로젝트: $PROJECT_ROOT"
 info "client: $CLIENTS"
 info "mode: $MODE"
+info "MCP scope: user"
 info "Cognee URL: $FIXED_COGNEE_BASE_URL"
 info "dataset: $PROJECT_DATASET"
 
@@ -258,6 +262,58 @@ check_bridge_text() {
   fi
 }
 
+file_has_json_cognee() {
+  [ -f "$1" ] && grep -Eq '"cognee"[[:space:]]*:' "$1"
+}
+
+file_has_codex_cognee() {
+  [ -f "$1" ] && grep -Eq \
+    '^[[:space:]]*\[mcp_servers\.cognee([.][^]]+)?\][[:space:]]*$' "$1"
+}
+
+check_project_json_override() {
+  local label config_path
+  label="$1"
+  shift
+  for config_path in "$@"; do
+    if file_has_json_cognee "$config_path"; then
+      fail "$label project-local Cognee 설정이 남아 있음 ($config_path)"
+    fi
+  done
+}
+
+canonical_file_path() {
+  local config_path config_dir config_name
+  config_path="$1"
+  config_dir="$(dirname "$config_path")"
+  config_name="$(basename "$config_path")"
+  config_dir="$(cd "$config_dir" 2>/dev/null && pwd -P)" || return 1
+  printf '%s/%s\n' "$config_dir" "$config_name"
+}
+
+check_user_config_path() {
+  local label config_path
+  label="$1"
+  config_path="$(canonical_file_path "$2")" || {
+    fail "$label 설정 경로를 확인할 수 없음 ($2)"
+    return 1
+  }
+
+  case "$config_path" in
+    "$PROJECT_ROOT"|"$PROJECT_ROOT"/*)
+      fail "$label 설정이 project scope에 있음 ($config_path)"
+      return 1
+      ;;
+  esac
+  case "$config_path" in
+    "$CHECK_HOME"/*) return 0 ;;
+    *)
+      fail "$label 설정이 user scope 경로 밖에 있음 ($config_path)"
+      return 1
+      ;;
+  esac
+}
+
 check_claude() {
   if ! command -v claude >/dev/null 2>&1; then
     fail "Claude Code CLI 미설치"
@@ -267,6 +323,13 @@ check_claude() {
 
   mcp_output="$(claude mcp get cognee 2>/dev/null || true)"
   check_bridge_text "$mcp_output" "Claude"
+  if printf '%s\n' "$mcp_output" | grep -Eqi \
+    'scope[[:space:]]*:[[:space:]]*user([[:space:]]|$)'; then
+    pass "Claude Cognee MCP가 user scope에 있음"
+  else
+    fail "Claude Cognee MCP가 user scope에 없음"
+  fi
+  check_project_json_override "Claude" "$PROJECT_ROOT/.mcp.json"
 
   plugin_output="$(claude plugin list 2>/dev/null || true)"
   if printf '%s\n' "$plugin_output" | grep -Eqi 'cognee-memory(@cognee)?'; then
@@ -285,6 +348,16 @@ check_codex() {
 
   mcp_output="$(codex mcp get cognee 2>/dev/null || true)"
   check_bridge_text "$mcp_output" "Codex"
+  user_config="$CHECK_HOME/.codex/config.toml"
+  if file_has_codex_cognee "$user_config"; then
+    pass "Codex Cognee MCP가 user scope에 있음 ($user_config)"
+  else
+    fail "Codex user scope Cognee MCP 설정 없음 ($user_config)"
+  fi
+  project_config="$PROJECT_ROOT/.codex/config.toml"
+  if file_has_codex_cognee "$project_config"; then
+    fail "Codex project-local Cognee 설정이 남아 있음 ($project_config)"
+  fi
 
   plugin_output="$(codex plugin list 2>/dev/null || true)"
   if printf '%s\n' "$plugin_output" | grep -Eqi 'cognee@cognee'; then
@@ -303,15 +376,20 @@ check_opencode() {
     fail "OpenCode CLI 미설치"
   fi
 
+  check_project_json_override \
+    "OpenCode" \
+    "$PROJECT_ROOT/opencode.json" \
+    "$PROJECT_ROOT/opencode.jsonc" \
+    "$PROJECT_ROOT/.opencode/opencode.json" \
+    "$PROJECT_ROOT/.opencode/opencode.jsonc"
+
   config_found=0
   config_seen=0
   native_plugin_found=0
   validation_error="Cognee MCP 설정이 없음"
   for config_path in \
-    "$PROJECT_ROOT/opencode.json" \
-    "$PROJECT_ROOT/opencode.jsonc" \
-    "$PROJECT_ROOT/.opencode/opencode.json" \
-    "$CHECK_HOME/.config/opencode/opencode.json"; do
+    "$CHECK_HOME/.config/opencode/opencode.json" \
+    "$CHECK_HOME/.config/opencode/opencode.jsonc"; do
     [ -f "$config_path" ] || continue
     config_seen=1
     if grep -Fq '@cognee/cognee-opencode' "$config_path"; then
@@ -518,6 +596,7 @@ PY
 }
 
 check_antigravity() {
+  local config_path validation_error
   if command -v antigravity >/dev/null 2>&1; then
     pass "Antigravity CLI 설치됨"
   else
@@ -525,6 +604,10 @@ check_antigravity() {
   fi
 
   config_path="$CHECK_HOME/.gemini/config/mcp_config.json"
+  check_project_json_override \
+    "Antigravity" \
+    "$PROJECT_ROOT/.agents/mcp_config.json" \
+    "$PROJECT_ROOT/.gemini/config/mcp_config.json"
   if [ ! -f "$config_path" ]; then
     fail "Antigravity Cognee MCP 설정 없음 ($config_path)"
     return
@@ -544,6 +627,9 @@ check_generic_mcp() {
   fi
   if [ ! -f "$GENERIC_MCP_CONFIG" ]; then
     fail "generic MCP 설정 파일이 없음 ($GENERIC_MCP_CONFIG)"
+    return
+  fi
+  if ! check_user_config_path "generic MCP" "$GENERIC_MCP_CONFIG"; then
     return
   fi
 
@@ -602,9 +688,9 @@ fi
 printf '%s\n' "----------------------------------------------------------"
 if [ "$FAILED" -eq 0 ]; then
   if [ "$PROBED" -eq 1 ]; then
-    echo "RESULT OK — Cognee keyless 설정과 server probe 통과"
+    echo "RESULT OK — Cognee user scope keyless 설정과 server probe 통과"
   else
-    echo "RESULT OK — Cognee keyless 로컬 설정 통과, server probe 생략"
+    echo "RESULT OK — Cognee user scope keyless 설정 통과, server probe 생략"
   fi
   exit 0
 fi

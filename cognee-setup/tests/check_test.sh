@@ -17,10 +17,12 @@ trap cleanup EXIT
 
 mkdir -p \
   "$PROJECT/.agents" \
+  "$FAKE_HOME/.codex" \
+  "$FAKE_HOME/.config/opencode" \
   "$FAKE_HOME/.gemini/config" \
   "$FAKE_BIN"
 
-cat > "$PROJECT/opencode.json" <<EOF
+cat > "$FAKE_HOME/.config/opencode/opencode.json" <<EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -39,6 +41,12 @@ cat > "$PROJECT/opencode.json" <<EOF
 }
 EOF
 
+cat > "$FAKE_HOME/.codex/config.toml" <<EOF
+[mcp_servers.cognee]
+command = "uvx"
+args = ["cognee-mcp", "--api-url", "$FIXED_URL"]
+EOF
+
 cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 {
   "mcpServers": {
@@ -54,7 +62,7 @@ cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 }
 EOF
 
-cat > "$PROJECT/mcp.json" <<EOF
+cat > "$FAKE_HOME/mcp.json" <<EOF
 {
   "mcpServers": {
     "cognee": {
@@ -73,6 +81,7 @@ cat > "$FAKE_BIN/claude" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
   "mcp get cognee")
+    echo "Scope: \${COGNEE_TEST_CLAUDE_SCOPE:-User}"
     echo "command: uvx"
     echo "args: cognee-mcp --api-url $FIXED_URL"
     ;;
@@ -180,6 +189,46 @@ expect_ok "generic MCP keyless remote" --client mcp --mcp-config mcp.json --mode
 expect_ok "all client keyless remote" --client all --mode remote --probe
 expect_ok "여러 client keyless remote" --client claude,codex,opencode,antigravity --mode auto --probe
 expect_ok "keyless REST probe" --client claude --mode remote --probe
+
+COGNEE_TEST_CLAUDE_SCOPE=Project expect_fail_with \
+  "Claude project scope 거부" \
+  "Claude Cognee MCP가 user scope에 없음" \
+  --client claude \
+  --mode remote \
+  --probe
+
+mkdir -p "$PROJECT/.codex"
+cat > "$PROJECT/.codex/config.toml" <<EOF
+[mcp_servers.cognee]
+command = "uvx"
+args = ["cognee-mcp", "--api-url", "$FIXED_URL"]
+EOF
+expect_fail_with \
+  "Codex project scope 거부" \
+  "Codex project-local Cognee 설정이 남아 있음" \
+  --client codex \
+  --mode remote \
+  --probe
+rm "$PROJECT/.codex/config.toml"
+
+cat > "$PROJECT/mcp.json" <<EOF
+{
+  "mcpServers": {
+    "cognee": {
+      "command": "uvx",
+      "args": ["cognee-mcp", "--api-url", "$FIXED_URL"]
+    }
+  }
+}
+EOF
+expect_fail_with \
+  "generic MCP project scope 거부" \
+  "generic MCP 설정이 project scope에 있음" \
+  --client mcp \
+  --mcp-config "$PROJECT/mcp.json" \
+  --mode remote \
+  --probe
+rm "$PROJECT/mcp.json"
 
 if [ ! -e "$PROJECT/.envrc" ] && [ ! -e "$PROJECT/.envrc.local" ]; then
   printf 'PASS  프로젝트 env 파일 불필요\n'
@@ -321,18 +370,18 @@ else
   exit 1
 fi
 
-cp "$PROJECT/opencode.json" "$TEST_ROOT/opencode.valid.json"
+cp "$FAKE_HOME/.config/opencode/opencode.json" "$TEST_ROOT/opencode.valid.json"
 sed "s#$FIXED_URL#https://wrong.example/#" \
-  "$TEST_ROOT/opencode.valid.json" > "$PROJECT/opencode.json"
+  "$TEST_ROOT/opencode.valid.json" > "$FAKE_HOME/.config/opencode/opencode.json"
 expect_fail_with \
   "OpenCode의 다른 URL 거부" \
   "OpenCode Cognee MCP 설정 오류: 고정 Cognee URL이 필요함" \
   --client opencode \
   --mode remote \
   --probe
-cp "$TEST_ROOT/opencode.valid.json" "$PROJECT/opencode.json"
+cp "$TEST_ROOT/opencode.valid.json" "$FAKE_HOME/.config/opencode/opencode.json"
 
-cat > "$PROJECT/opencode.json" <<EOF
+cat > "$FAKE_HOME/.config/opencode/opencode.json" <<EOF
 {
   "mcp": {
     "servers": {
@@ -360,7 +409,16 @@ expect_fail_with \
   --client opencode \
   --mode remote \
   --probe
+cp "$TEST_ROOT/opencode.valid.json" "$FAKE_HOME/.config/opencode/opencode.json"
+
 cp "$TEST_ROOT/opencode.valid.json" "$PROJECT/opencode.json"
+expect_fail_with \
+  "OpenCode project scope 거부" \
+  "OpenCode project-local Cognee 설정이 남아 있음" \
+  --client opencode \
+  --mode remote \
+  --probe
+rm "$PROJECT/opencode.json"
 
 cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 {
@@ -385,7 +443,16 @@ expect_fail_with \
   --client antigravity \
   --mode remote
 
-rm "$FAKE_HOME/.gemini/config/mcp_config.json"
+cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
+{
+  "mcpServers": {
+    "cognee": {
+      "command": "uvx",
+      "args": ["cognee-mcp", "--api-url", "$FIXED_URL"]
+    }
+  }
+}
+EOF
 cat > "$PROJECT/.agents/mcp_config.json" <<EOF
 {
   "mcpServers": {
@@ -398,9 +465,10 @@ cat > "$PROJECT/.agents/mcp_config.json" <<EOF
 EOF
 
 expect_fail_with \
-  "Antigravity project-local 비지원" \
-  "Antigravity Cognee MCP 설정 없음" \
+  "Antigravity project scope 거부" \
+  "Antigravity project-local Cognee 설정이 남아 있음" \
   --client antigravity \
-  --mode remote
+  --mode remote \
+  --probe
 
 echo "RESULT OK — check.sh fixture tests passed"
