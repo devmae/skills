@@ -12,7 +12,14 @@ description: "현재 대화에서 작업한 파일 변경사항을 새 브랜치
 ## 사전 조건
  
 - 로컬에 git 저장소가 클론되어 있어야 한다.
-- `gh` CLI가 설치되어 있고 인증돼 있어야 한다. 시작 전에 `gh auth status` 로 확인하고, 실패하면 사용자에게 `gh auth login` 을 안내하고 중단한다.
+- `gh` CLI가 설치되어 있고 인증돼 있어야 한다.
+
+## 실행 환경
+
+GitHub 서버에 접속하는 CLI 명령은 에이전트 격리 환경 밖의 host CLI에서 실행한다. `gh` 전체와 `git clone`, `git fetch`, `git pull`, `git push`, `git ls-remote` 등이 이에 속한다. `git status`, `git add`, `git commit` 같은 로컬 명령은 격리 환경 안에서 실행해도 된다.
+
+시작 전에 격리 환경 밖의 host CLI에서 `gh auth status` 를 실행한다. 격리 환경 안의 인증 실패만으로 token 만료를 판단하거나 `gh auth login` 을 안내하지 않는다. host CLI에서도 실패할 때만 사용자에게 로그인을 안내하고 중단한다.
+
 ---
  
 ## 워크플로우
