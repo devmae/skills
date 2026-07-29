@@ -97,16 +97,17 @@ gh pr view <번호> --json mergeable,mergeStateStatus
  
 - CI가 실패했으면 실패 로그를 확인하고 3단계 루프로 돌아간다. CI가 아직 실행 중이면 `gh pr checks <번호> --watch` 로 완료를 기다린다.
 - `mergeable` 이 `CONFLICTING` 이면 사용자에게 알리고 충돌 해결 방법을 확인받는다.
-**머지 방식은 리포 설정을 따른다.** 허용된 방식을 조회한다:
+
+**머지 방식은 merge commit으로 고정한다.** 사용자에게 방식을 묻지 않는다. 저장소가 merge commit을 허용하는지 확인한다:
  
 ```bash
-gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed
+gh repo view --json mergeCommitAllowed
 ```
  
-- 허용된 방식이 **하나뿐이면** 그것을 사용한다.
-- **여러 개가 허용**되면 사용자에게 어떤 방식으로 머지할지 한 번 확인한다.
+- `mergeCommitAllowed` 가 `false` 면 사용자에게 알리고 중단한다. squash나 rebase로 바꾸지 않는다.
+
 ```bash
-gh pr merge <번호> --squash   # 또는 --merge / --rebase
+gh pr merge <번호> --merge
 ```
  
 머지 성공 후 사용자에게 보고한다:
@@ -144,19 +145,9 @@ git branch -d <headRefName>    # 로컬에 head 브랜치가 있을 때만
 ```
  
 - fast-forward는 반드시 `--ff-only` 를 사용한다. 실패하면 로컬 base 브랜치에 원격에 없는 커밋이 있다는 뜻이므로, 강제로 리셋하지 말고 사용자에게 상황을 보고한다.
-- 일반 merge / rebase merge 후 브랜치 삭제는 `-d` (소문자)만 사용한다. 머지되지 않은 커밋이 있으면 git이 거부하므로 안전하다.
-- squash merge 는 PR 커밋이 base 히스토리에 그대로 남지 않으므로 `git branch -d <headRefName>` 가 거부될 수 있다. 이 경우 **다음 조건을 모두 확인한 뒤에만** 로컬 PR head 브랜치를 강제 삭제한다:
-  - 이번 워크플로우에서 `gh pr merge <번호> --squash` 가 성공했거나, `gh pr view <번호> --json state,mergedAt` 로 `state=MERGED` 와 `mergedAt` 이 확인된다.
-  - 삭제 대상이 해당 PR 의 `headRefName` 과 정확히 일치한다.
-  - head 브랜치를 체크아웃한 worktree 가 없거나, 위 절차로 깨끗하게 제거됐다.
-  - 현재 작업 트리가 깨끗하다.
-```bash
-git branch -D <headRefName>    # squash merge 성공 확인 후, 해당 PR head 브랜치에만 허용
-```
- 
-- 위 조건 중 하나라도 불확실하면 `-D` 를 쓰지 말고 사용자에게 상황을 보고한다.
+- 로컬 PR head 브랜치는 `-d` (소문자)로만 삭제한다. git이 거부하면 `-D` 를 쓰지 말고 사용자에게 상황을 보고한다.
 - 작업 트리에 커밋되지 않은 변경이 있으면 체크아웃 전에 사용자에게 어떻게 처리할지(stash / commit / 중단) 확인한다.
-마지막으로 전체 결과를 요약한다: 리뷰에서 발견·수정한 문제, 머지 방식, 로컬 정리 상태(worktree 제거 포함, squash merge 로 `-D` 를 사용했다면 그 확인 근거 포함).
+마지막으로 전체 결과를 요약한다: 리뷰에서 발견·수정한 문제, merge commit 결과, 로컬 정리 상태(worktree 제거 포함).
 ### 6단계: 원격 브랜치 정리 및 이슈 종료
  
 PR이 머지되면 원격 head 브랜치를 삭제하고, 이 PR과 연결된 GitHub 이슈에 코멘트를 남기고 종료한다.
