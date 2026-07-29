@@ -45,7 +45,21 @@ keyless remote mode에서는 native Cognee plugin을 쓰지 않는다. 현재 na
 
 remote server는 앱 인증을 꺼야 한다. Tailscale에서 server 접근을 허용할 device, user, tag만 제한한다. public network에 Cognee port를 열지 않는다.
 
-## 3. 설정
+## 3. 기존 설정 제거
+
+프로젝트에 기존 env 파일이 있으면 Cognee 관련 줄만 제거한다. 다른 tool의 값은 보존한다.
+
+```bash
+rg -l 'COGNEE_' <프로젝트 루트>/.envrc <프로젝트 루트>/.envrc.local 2>/dev/null || true
+```
+
+값을 답변이나 로그에 출력하지 않는다. `COGNEE_*` 선언과 Cognee만 위해 만든 alias를 지운다. 파일에 다른 설정이 없으면 파일도 지운다. 다른 설정이 남으면 파일을 보존하되 Cognee 연결에 쓰지 않는다.
+
+native plugin을 모두 끄거나 지운 뒤 `~/.cognee-plugin/api_key.json` cache도 지운다. 현재 shell에 `COGNEE_API_KEY`가 남아 있으면 unset하고 client를 다시 시작한다.
+
+검사에서 `legacy Cognee 설정`이 나오면 client 등록보다 이 정리를 먼저 한다.
+
+## 4. 설정
 
 remote mode는 다음 bridge를 stdio MCP server로 등록한다.
 
@@ -64,7 +78,7 @@ agent에게 다음 규칙을 준다.
 
 MCP API mode는 dataset 기본값을 client별로 만들 수 있다. 따라서 모든 memory 호출에 계산한 dataset을 명시해야 여러 client가 기억을 공유한다.
 
-## 4. 검사
+## 5. 검사
 
 `--client` 값은 `auto`, `all`, `claude`, `codex`, `opencode`, `antigravity`, `mcp`다. 쉼표로 여러 값을 줄 수 있다.
 
@@ -79,7 +93,17 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 `remote` mode는 Tailscale 연결, `uvx`, client MCP 등록, 고정 URL, token 인자 부재를 검사한다. `RESULT OK`는 설정과 keyless REST probe가 모두 통과했을 때만 쓴다.
 
-## 5. 실제 검증
+generic MCP client는 설정 파일 경로도 준다.
+
+```bash
+bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
+  --client mcp \
+  --mcp-config <MCP JSON 설정 파일> \
+  --mode remote \
+  --probe
+```
+
+## 6. 실제 검증
 
 다음 순서로 검증한다.
 
@@ -92,7 +116,7 @@ bash <이 스킬 경로>/scripts/check.sh <프로젝트 루트> \
 
 test memory 원문은 로그에 쓰지 않는다. 실패하면 client, 단계, 남은 작업만 짧게 적는다.
 
-## 6. server 조건
+## 7. server 조건
 
 Cognee server에서 다음 값을 적용하고 재시작한다. 이 값은 server 서비스 설정에 두며 프로젝트 env 파일에 두지 않는다.
 

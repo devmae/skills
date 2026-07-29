@@ -98,3 +98,5 @@ stdio 설정에 같은 command와 args를 넣는다.
 ```
 
 client가 local stdio MCP를 지원하지 않으면 이 방식으로 연결할 수 없다. REST URL에 `/mcp`를 붙이지 않는다.
+
+설정 뒤에는 해당 JSON 파일을 검사 명령의 `--mcp-config`에 넘긴다.

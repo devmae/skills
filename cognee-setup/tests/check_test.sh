@@ -54,6 +54,21 @@ cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF
 }
 EOF
 
+cat > "$PROJECT/mcp.json" <<EOF
+{
+  "mcpServers": {
+    "cognee": {
+      "command": "uvx",
+      "args": [
+        "cognee-mcp",
+        "--api-url",
+        "$FIXED_URL"
+      ]
+    }
+  }
+}
+EOF
+
 cat > "$FAKE_BIN/claude" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
@@ -157,11 +172,13 @@ expect_fail_with() {
   fi
 }
 
-expect_ok "Claude keyless remote" --client claude --mode remote
-expect_ok "Codex keyless remote" --client codex --mode remote
-expect_ok "OpenCode keyless remote" --client opencode --mode remote
-expect_ok "Antigravity keyless remote" --client antigravity --mode remote
-expect_ok "여러 client keyless remote" --client claude,codex,opencode,antigravity --mode auto
+expect_ok "Claude keyless remote" --client claude --mode remote --probe
+expect_ok "Codex keyless remote" --client codex --mode remote --probe
+expect_ok "OpenCode keyless remote" --client opencode --mode remote --probe
+expect_ok "Antigravity keyless remote" --client antigravity --mode remote --probe
+expect_ok "generic MCP keyless remote" --client mcp --mcp-config mcp.json --mode remote --probe
+expect_ok "all client keyless remote" --client all --mode remote --probe
+expect_ok "여러 client keyless remote" --client claude,codex,opencode,antigravity --mode auto --probe
 expect_ok "keyless REST probe" --client claude --mode remote --probe
 
 if [ ! -e "$PROJECT/.envrc" ] && [ ! -e "$PROJECT/.envrc.local" ]; then
@@ -178,7 +195,7 @@ if output="$(
     COGNEE_PICKER_PLATFORM=darwin \
     COGNEE_OSASCRIPT_BIN="$FAKE_BIN/folder-picker" \
     COGNEE_PICKER_RESULT="$PROJECT" \
-    bash "$CHECK_SCRIPT" --pick --client claude --mode remote 2>&1
+    bash "$CHECK_SCRIPT" --pick --client claude --mode remote --probe 2>&1
 )"; then
   printf 'PASS  folder picker 선택 경로 검사\n'
 else
@@ -190,7 +207,7 @@ if output="$(
   PATH="$FAKE_BIN:/usr/bin:/bin" \
     COGNEE_CHECK_HOME="$FAKE_HOME" \
     COGNEE_CYGPATH_RESULT="$PROJECT" \
-    bash "$CHECK_SCRIPT" 'C:\selected project' --client claude --mode remote 2>&1
+    bash "$CHECK_SCRIPT" 'C:\selected project' --client claude --mode remote --probe 2>&1
 )"; then
   printf 'PASS  Windows 경로를 Bash 경로로 변환\n'
 else
@@ -216,6 +233,63 @@ expect_fail_with \
   "--client에 하나 이상의 client가 필요함" \
   --client "" \
   --mode remote
+
+expect_fail_with \
+  "server probe 생략 거부" \
+  "server probe 생략 — --probe가 필요함" \
+  --client claude \
+  --mode remote
+
+expect_fail_with \
+  "generic MCP 설정 파일 필수" \
+  "generic MCP client는 --mcp-config가 필요함" \
+  --client mcp \
+  --mode remote \
+  --probe
+
+cat > "$PROJECT/.envrc" <<'EOF'
+export COGNEE_BASE_URL="https://legacy.example/"
+EOF
+cat > "$PROJECT/.envrc.local" <<'EOF'
+export COGNEE_API_KEY="legacy-secret-must-not-print"
+EOF
+
+if output="$(run_check --client claude --mode remote --probe 2>&1)"; then
+  printf 'FAIL  legacy Cognee env를 찾아야 함\n' >&2
+  exit 1
+elif ! printf '%s\n' "$output" | grep -Fq "legacy Cognee 설정이 남아 있음"; then
+  printf 'FAIL  legacy Cognee env 탐지 문구 없음\n%s\n' "$output" >&2
+  exit 1
+elif printf '%s\n' "$output" | grep -Fq "legacy-secret-must-not-print"; then
+  printf 'FAIL  legacy secret이 출력됨\n' >&2
+  exit 1
+else
+  printf 'PASS  legacy Cognee env를 값 출력 없이 탐지\n'
+fi
+rm "$PROJECT/.envrc" "$PROJECT/.envrc.local"
+
+if output="$(COGNEE_API_KEY="shell-secret-must-not-print" run_check --client claude --mode remote --probe 2>&1)"; then
+  printf 'FAIL  shell의 legacy Cognee key를 찾아야 함\n' >&2
+  exit 1
+elif ! printf '%s\n' "$output" | grep -Fq "현재 shell에 legacy Cognee API key가 남아 있음"; then
+  printf 'FAIL  shell의 legacy Cognee key 탐지 문구 없음\n%s\n' "$output" >&2
+  exit 1
+elif printf '%s\n' "$output" | grep -Fq "shell-secret-must-not-print"; then
+  printf 'FAIL  shell의 legacy secret이 출력됨\n' >&2
+  exit 1
+else
+  printf 'PASS  shell의 legacy Cognee key를 값 출력 없이 탐지\n'
+fi
+
+mkdir -p "$FAKE_HOME/.cognee-plugin"
+printf '{}' > "$FAKE_HOME/.cognee-plugin/api_key.json"
+expect_fail_with \
+  "native Cognee key cache 탐지" \
+  "native Cognee API key cache가 남아 있음" \
+  --client claude \
+  --mode remote \
+  --probe
+rm "$FAKE_HOME/.cognee-plugin/api_key.json"
 
 if output="$(
   PATH="$FAKE_BIN:/usr/bin:/bin" \
@@ -252,9 +326,40 @@ sed "s#$FIXED_URL#https://wrong.example/#" \
   "$TEST_ROOT/opencode.valid.json" > "$PROJECT/opencode.json"
 expect_fail_with \
   "OpenCode의 다른 URL 거부" \
-  "OpenCode keyless Cognee MCP 설정 없음" \
+  "OpenCode Cognee MCP 설정 오류: 고정 Cognee URL이 필요함" \
   --client opencode \
-  --mode remote
+  --mode remote \
+  --probe
+cp "$TEST_ROOT/opencode.valid.json" "$PROJECT/opencode.json"
+
+cat > "$PROJECT/opencode.json" <<EOF
+{
+  "mcp": {
+    "servers": {
+      "cognee": {
+        "type": "local",
+        "command": ["wrong-command"]
+      },
+      "other": {
+        "type": "local",
+        "command": [
+          "uvx",
+          "cognee-mcp",
+          "--api-url",
+          "$FIXED_URL"
+        ]
+      }
+    }
+  }
+}
+EOF
+
+expect_fail_with \
+  "다른 OpenCode server 값을 Cognee로 오판하지 않음" \
+  "OpenCode Cognee MCP 설정 오류" \
+  --client opencode \
+  --mode remote \
+  --probe
 cp "$TEST_ROOT/opencode.valid.json" "$PROJECT/opencode.json"
 
 cat > "$FAKE_HOME/.gemini/config/mcp_config.json" <<EOF

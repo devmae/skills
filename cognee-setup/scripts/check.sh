@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # API key와 프로젝트 env 파일 없이 쓰는 Cognee MCP bridge를 검사한다.
-# 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mode auto|remote] [--probe]
+# 사용법: check.sh [project-root|--pick] [--client NAME[,NAME...]] [--mcp-config FILE] [--mode auto|remote] [--probe]
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
@@ -8,6 +8,7 @@ PROJECT_ROOT=""
 PICK_PROJECT_ROOT=0
 CLIENT_SPEC="auto"
 MODE="auto"
+GENERIC_MCP_CONFIG=""
 PROBE=0
 FAILED=0
 PROBED=0
@@ -25,6 +26,7 @@ Usage: check.sh [project-root|--pick] [options]
 Options:
   --pick                    OS folder picker로 프로젝트 루트 선택
   --client NAME[,NAME...]  auto, all, claude, codex, opencode, antigravity, mcp
+  --mcp-config FILE        generic MCP client의 JSON 설정 파일
   --mode MODE              auto, remote
   --probe                   key 없이 원격 REST endpoint 검사
   -h, --help               도움말 출력
@@ -45,6 +47,11 @@ while [ "$#" -gt 0 ]; do
     --mode)
       [ "$#" -ge 2 ] || { printf 'ERROR --mode 값이 필요함\n' >&2; exit 2; }
       MODE="$2"
+      shift 2
+      ;;
+    --mcp-config)
+      [ "$#" -ge 2 ] || { printf 'ERROR --mcp-config 값이 필요함\n' >&2; exit 2; }
+      GENERIC_MCP_CONFIG="$2"
       shift 2
       ;;
     --probe)
@@ -116,6 +123,12 @@ fi
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" 2>/dev/null && pwd -P)"
 PROJECT_DATASET="$(basename "$PROJECT_ROOT")"
 CHECK_HOME="${COGNEE_CHECK_HOME:-$HOME}"
+if [ -n "$GENERIC_MCP_CONFIG" ]; then
+  case "$GENERIC_MCP_CONFIG" in
+    /*) ;;
+    *) GENERIC_MCP_CONFIG="$PROJECT_ROOT/$GENERIC_MCP_CONFIG" ;;
+  esac
+fi
 
 case "$MODE" in
   auto) MODE="remote" ;;
@@ -155,7 +168,7 @@ CLIENTS=""
 if [ "$CLIENT_SPEC" = "auto" ]; then
   detect_clients
 elif [ "$CLIENT_SPEC" = "all" ]; then
-  CLIENTS="claude codex opencode antigravity mcp"
+  CLIENTS="claude codex opencode antigravity"
 else
   old_ifs="$IFS"
   IFS=','
@@ -204,6 +217,20 @@ check_uvx() {
     pass "uvx 설치됨"
   else
     fail "uvx 미설치"
+  fi
+}
+
+check_legacy_env() {
+  for env_path in "$PROJECT_ROOT/.envrc" "$PROJECT_ROOT/.envrc.local"; do
+    if [ -f "$env_path" ] && grep -Eq '(^|[^[:alnum:]_])COGNEE_[[:alnum:]_]+' "$env_path"; then
+      fail "legacy Cognee 설정이 남아 있음 ($env_path)"
+    fi
+  done
+  if [ -n "${COGNEE_API_KEY:-}" ]; then
+    fail "현재 shell에 legacy Cognee API key가 남아 있음"
+  fi
+  if [ -f "$CHECK_HOME/.cognee-plugin/api_key.json" ]; then
+    fail "native Cognee API key cache가 남아 있음 ($CHECK_HOME/.cognee-plugin/api_key.json)"
   fi
 }
 
@@ -277,33 +304,165 @@ check_opencode() {
   fi
 
   config_found=0
+  config_seen=0
+  native_plugin_found=0
+  validation_error="Cognee MCP 설정이 없음"
   for config_path in \
     "$PROJECT_ROOT/opencode.json" \
     "$PROJECT_ROOT/opencode.jsonc" \
     "$PROJECT_ROOT/.opencode/opencode.json" \
     "$CHECK_HOME/.config/opencode/opencode.json"; do
     [ -f "$config_path" ] || continue
-    if grep -Eq '"mcp"[[:space:]]*:' "$config_path" \
-      && grep -Eqi '"cognee"[[:space:]]*:' "$config_path" \
-      && grep -Fq '"uvx"' "$config_path" \
-      && grep -Fq '"cognee-mcp"' "$config_path" \
-      && grep -Fq '"--api-url"' "$config_path" \
-      && grep -Fq "$FIXED_COGNEE_BASE_URL" "$config_path"; then
-      if has_forbidden_auth "$(sed -n '/"cognee"[[:space:]]*:/,/^[[:space:]]*}[,]*/p' "$config_path")"; then
-        fail "OpenCode Cognee 설정에 인증 key 또는 token이 있음 ($config_path)"
-      elif grep -Fq '@cognee/cognee-opencode' "$config_path"; then
-        fail "OpenCode native Cognee plugin이 남아 있음 ($config_path)"
-      else
-        pass "OpenCode keyless MCP bridge 설정됨 ($config_path)"
-        config_found=1
-      fi
-      break
+    config_seen=1
+    if grep -Fq '@cognee/cognee-opencode' "$config_path"; then
+      native_plugin_found=1
+    fi
+    if validation_error="$(validate_opencode_config "$config_path" 2>&1)"; then
+      pass "OpenCode keyless MCP bridge 설정됨 ($config_path)"
+      config_found=1
     fi
   done
-  [ "$config_found" -eq 1 ] || fail "OpenCode keyless Cognee MCP 설정 없음"
+  if [ "$native_plugin_found" -eq 1 ]; then
+    fail "OpenCode native Cognee plugin이 남아 있음"
+  fi
+  if [ "$config_found" -ne 1 ]; then
+    if [ "$config_seen" -eq 1 ]; then
+      fail "OpenCode Cognee MCP 설정 오류: $validation_error"
+    else
+      fail "OpenCode keyless Cognee MCP 설정 없음"
+    fi
+  fi
 }
 
-validate_antigravity_config() {
+validate_opencode_config() {
+  config_path="$1"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'python3가 없어 JSON을 검사할 수 없음'
+    return 1
+  fi
+
+  python3 - "$config_path" "$FIXED_COGNEE_BASE_URL" <<'PY'
+import json
+import sys
+
+path, expected_url = sys.argv[1:3]
+
+def strip_jsonc(text):
+    output = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            end = text.find("*/", index + 2)
+            if end == -1:
+                raise ValueError("닫히지 않은 block comment")
+            index = end + 2
+            continue
+        output.append(char)
+        index += 1
+
+    text = "".join(output)
+    output = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            output.append(char)
+            index += 1
+            continue
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < len(text) and text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(text) and text[lookahead] in "}]":
+                index += 1
+                continue
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+try:
+    with open(path, encoding="utf-8") as file:
+        config = json.loads(strip_jsonc(file.read()))
+except (OSError, ValueError, json.JSONDecodeError):
+    print("JSON 형식 오류")
+    raise SystemExit(1)
+
+servers_root = config.get("mcp") if isinstance(config, dict) else None
+servers = servers_root.get("servers") if isinstance(servers_root, dict) else None
+server = servers.get("cognee") if isinstance(servers, dict) else None
+if not isinstance(server, dict):
+    print("mcp.servers.cognee 객체가 필요함")
+    raise SystemExit(1)
+
+if server.get("type") != "local":
+    print("type은 local이어야 함")
+    raise SystemExit(1)
+
+command = server.get("command")
+if not isinstance(command, list) or not all(isinstance(value, str) for value in command):
+    print("command 문자열 배열이 필요함")
+    raise SystemExit(1)
+
+if not command or command[0] != "uvx" or "cognee-mcp" not in command:
+    print("uvx cognee-mcp command가 필요함")
+    raise SystemExit(1)
+
+try:
+    url_index = command.index("--api-url")
+except ValueError:
+    print("--api-url이 필요함")
+    raise SystemExit(1)
+if url_index + 1 >= len(command) or command[url_index + 1] != expected_url:
+    print("고정 Cognee URL이 필요함")
+    raise SystemExit(1)
+
+serialized = json.dumps(server).lower()
+for forbidden in ("api-token", "serve-api-key", "bearer-token", "authorization", "api_key", "api-key"):
+    if forbidden in serialized:
+        print("인증 key 또는 token을 넣을 수 없음")
+        raise SystemExit(1)
+PY
+}
+
+validate_standard_mcp_config() {
   config_path="$1"
 
   if ! command -v python3 >/dev/null 2>&1; then
@@ -338,9 +497,16 @@ if not isinstance(args, list) or not all(isinstance(value, str) for value in arg
     print("args 문자열 배열이 필요함")
     raise SystemExit(1)
 
-required = ["cognee-mcp", "--api-url", expected_url]
-if any(value not in args for value in required):
-    print("cognee-mcp, --api-url, 고정 URL이 필요함")
+if "cognee-mcp" not in args:
+    print("cognee-mcp가 필요함")
+    raise SystemExit(1)
+try:
+    url_index = args.index("--api-url")
+except ValueError:
+    print("--api-url이 필요함")
+    raise SystemExit(1)
+if url_index + 1 >= len(args) or args[url_index + 1] != expected_url:
+    print("고정 Cognee URL이 필요함")
     raise SystemExit(1)
 
 serialized = json.dumps(server).lower()
@@ -364,10 +530,27 @@ check_antigravity() {
     return
   fi
 
-  if validation_error="$(validate_antigravity_config "$config_path" 2>&1)"; then
+  if validation_error="$(validate_standard_mcp_config "$config_path" 2>&1)"; then
     pass "Antigravity keyless MCP bridge 설정됨 ($config_path)"
   else
     fail "Antigravity Cognee MCP 설정 오류 ($config_path): $validation_error"
+  fi
+}
+
+check_generic_mcp() {
+  if [ -z "$GENERIC_MCP_CONFIG" ]; then
+    fail "generic MCP client는 --mcp-config가 필요함"
+    return
+  fi
+  if [ ! -f "$GENERIC_MCP_CONFIG" ]; then
+    fail "generic MCP 설정 파일이 없음 ($GENERIC_MCP_CONFIG)"
+    return
+  fi
+
+  if validation_error="$(validate_standard_mcp_config "$GENERIC_MCP_CONFIG" 2>&1)"; then
+    pass "generic keyless MCP bridge 설정됨 ($GENERIC_MCP_CONFIG)"
+  else
+    fail "generic Cognee MCP 설정 오류 ($GENERIC_MCP_CONFIG): $validation_error"
   fi
 }
 
@@ -397,6 +580,7 @@ check_server() {
 
 check_tailscale
 check_uvx
+check_legacy_env
 
 for client in $CLIENTS; do
   case "$client" in
@@ -404,7 +588,7 @@ for client in $CLIENTS; do
     codex) check_codex ;;
     opencode) check_opencode ;;
     antigravity) check_antigravity ;;
-    mcp) info "generic MCP client는 같은 uvx command 등록을 직접 확인해야 함" ;;
+    mcp) check_generic_mcp ;;
   esac
 done
 
@@ -412,7 +596,7 @@ if [ "$PROBE" -eq 1 ]; then
   PROBED=1
   check_server
 else
-  info "server probe 생략 — 전체 검증에는 --probe 필요"
+  fail "server probe 생략 — --probe가 필요함"
 fi
 
 printf '%s\n' "----------------------------------------------------------"
