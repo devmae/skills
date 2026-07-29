@@ -16,9 +16,9 @@ description: "현재 대화에서 작업한 파일 변경사항을 새 브랜치
 
 ## 실행 환경
 
-GitHub 서버에 접속하는 CLI 명령은 Codex sandbox 밖에서 실행한다. `gh` 전체와 `git clone`, `git fetch`, `git pull`, `git push`, `git ls-remote` 등이 이에 속한다. `git status`, `git add`, `git commit` 같은 로컬 명령은 sandbox 안에서 실행해도 된다.
+GitHub 서버에 접속하는 CLI 명령은 에이전트 격리 환경 밖의 host CLI에서 실행한다. `gh` 전체와 `git clone`, `git fetch`, `git pull`, `git push`, `git ls-remote` 등이 이에 속한다. `git status`, `git add`, `git commit` 같은 로컬 명령은 격리 환경 안에서 실행해도 된다.
 
-시작 전에 sandbox 밖에서 `gh auth status` 를 실행한다. sandbox 안의 인증 실패만으로 token 만료를 판단하거나 `gh auth login` 을 안내하지 않는다. sandbox 밖에서도 실패할 때만 사용자에게 로그인을 안내하고 중단한다.
+시작 전에 격리 환경 밖의 host CLI에서 `gh auth status` 를 실행한다. 격리 환경 안의 인증 실패만으로 token 만료를 판단하거나 `gh auth login` 을 안내하지 않는다. host CLI에서도 실패할 때만 사용자에게 로그인을 안내하고 중단한다.
 
 ---
  
