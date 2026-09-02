@@ -207,4 +207,8 @@ hitl_head_sha: <head_sha>
 
 ## 종료 보고
 
-모든 대상 issue가 CLOSED이고 각 PR이 MERGED일 때만 완료로 판정한다. issue별 PR·HITL comment 링크, recorded head SHA, merge SHA, 고친 핵심 finding, 검증 결과를 보고한다.
+모든 대상 issue가 CLOSED이고 각 PR이 MERGED일 때만 완료로 판정한다. 최종 답변에는 issue별 결과를 다음 표로 넣는다. 각 행의 `HITL comment`는 GitHub comment의 직접 링크여야 하며 생략하지 않는다.
+
+| Issue | PR | HITL comment | Recorded head SHA | Merge SHA | 검증·핵심 finding |
+|---|---|---|---|---|---|
+| #<번호> | <PR URL> | <HITL comment URL> | `<sha>` | `<sha>` | <결과> |
