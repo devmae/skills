@@ -1,150 +1,155 @@
 ---
 name: issue-loop-mattpocock
-description: "1개의 오케스트레이터 에이전트가 GitHub 이슈 묶음을 1개씩 끝까지 처리한다. 시작 즉시 각 서브에이전트의 모델을 묻고, 구현·Git/GitHub 작업·두 단계 리뷰·수정·PR 머지·이슈 종료를 모두 서브에이전트에 맡긴다. 사용자가 이슈 번호·label·milestone과 함께 이슈 루프 실행, 티켓 순차 처리, 모든 이슈 해결을 요청할 때 사용한다."
+description: "오케스트레이터가 GitHub 이슈를 하나씩 구현하고 local mattpocock:code-review, exact SHA PR, 사람이 승인하는 HITL merge skill을 조합해 정리까지 끝낸다. 사용자가 issue 번호·label·milestone과 함께 이슈 루프나 순차 처리를 요청할 때 사용한다."
 ---
 
-## 최우선: 서브에이전트 모델 확인
+## 먼저 서브에이전트 모델 확인
 
-이 스킬을 불러오면 조사, 명령 실행, 서브에이전트 생성을 시작하기 전에 사람에게 다음 문장만 즉시 묻고 답을 기다린다.
+이 스킬을 불러오면 조사나 실행 전에 다음 문장만 묻고 답을 기다린다.
 
-> 각 서브 에이전트는 어떤 모델을 사용할까요?
+> 각 서브에이전트는 어떤 모델을 사용할까요?
 
-사람은 모든 서브에이전트에 같은 모델을 지정하거나 역할별 모델을 지정할 수 있다. 오케스트레이터는 답에 맞춰 각 서브에이전트를 생성한다. 지정한 모델을 쓸 수 없으면 대체 모델을 임의로 고르지 말고 다시 묻는다.
+사용자는 모든 역할에 같은 모델을 주거나 역할별 모델을 정할 수 있다. 지정한 모델을 쓸 수 없으면 대체 모델을 고르지 말고 다시 묻는다.
 
-# Issue Loop — 오케스트레이터 기반 이슈 완주
+# Issue Loop — Matt Review + HITL Merge
 
-목표는 대상 이슈를 모두 구현하고, 각 PR을 리뷰·머지한 뒤 이슈를 닫는 것이다. 한 이슈를 끝내기 전에는 다음 이슈를 시작하지 않는다.
+대상 issue를 하나씩 끝낸다. PR마다 HITL comment를 남기고 사용자가 같은 세션에서 승인할 때까지 merge를 멈춘다.
 
 ```text
-이슈 조사 → 구현 → PR → Spec/Standards 리뷰 → Correctness 리뷰 → CI·머지·정리 → 다음 이슈
+issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA push·PR → HITL comment → 사용자 승인 → merge·정리 → 다음 issue
 ```
 
-## 에이전트 구조
+## 조합하는 skill
 
-오케스트레이터는 정확히 1개다. 오케스트레이터는 작업 상태, 순서, 증거, 재시도만 관리한다. 직접 구현하거나 리뷰하거나 Git/GitHub 명령을 실행하지 않는다.
+| Skill | 이 loop에서 맡는 일 |
+|---|---|
+| `mattpocock:code-review` | local commit 전체를 저장소 Standard와 issue spec 기준으로 리뷰 |
+| `github-commit-to-pr` | clean review SHA를 대조하고 push·PR 생성·갱신 |
+| `github-pr-hitl-merge` | PR 전체 요약 comment, 사용자 승인 대기, 승인된 SHA merge·정리 |
+
+오케스트레이터는 하위 skill의 내부 단계를 복제하지 않는다. 입력과 증거를 넘기고 완료 결과를 받는다.
+
+## 에이전트 역할
 
 | 역할 | 책임 |
 |---|---|
-| 오케스트레이터 | 대상 이슈와 순서를 확정하고, 단계별 서브에이전트를 배정하며, 결과 증거를 확인하고 다음 단계를 결정한다. |
-| 구현 서브에이전트 | 코드·문서·테스트를 구현하고 로컬 검증 결과를 보고한다. |
-| 리뷰 서브에이전트 | 구현과 분리된 시각으로 Spec/Standards 또는 correctness를 리뷰한다. |
-| GitHub 서브에이전트 | 이슈 조회, base 동기화, branch·commit·push·PR, CI 확인, merge, branch 정리, issue close를 처리한다. |
+| 오케스트레이터 | issue 순서, 단계 상태, exact SHA, HITL 승인 상태 관리 |
+| 구현 에이전트 | issue 구현, review·CI·사용자 요청 수정, local 검증 |
+| 리뷰 에이전트 | `mattpocock:code-review`로 local 전체 diff 리뷰 |
+| GitHub 에이전트 | branch·commit, PR 생성·갱신, HITL·merge skill 실행과 증거 수집 |
 
-- 모든 실행 단계는 서브에이전트가 맡는다. 오케스트레이터가 빈 단계를 직접 메우지 않는다.
-- 서브에이전트는 오케스트레이터가 아니다. 다른 에이전트를 지휘하지 않고 맡은 단계만 끝낸 뒤 증거를 보고한다.
-- 구현자는 자기 변경의 최종 리뷰를 맡지 않는다. 두 리뷰 축도 서로 다른 서브에이전트가 맡는다.
-- 같은 저장소를 바꾸는 서브에이전트는 동시에 실행하지 않는다. 읽기 전용 조사만 필요할 때 병렬 실행할 수 있다.
-- 서브에이전트가 끝나면 오케스트레이터는 diff, test, PR, CI, merge, issue state 증거를 확인한 뒤 다음 작업을 준다.
-- 서브에이전트가 사람 승인 필요성을 발견하면 직접 묻지 않고 오케스트레이터에 근거를 보고한다. 사람에게 묻는 주체는 오케스트레이터뿐이다.
+구현자는 자기 변경을 clean으로 승인하지 않는다. 리뷰는 새 에이전트가 맡는다. 같은 저장소를 쓰는 에이전트는 동시에 파일을 바꾸지 않는다.
 
-## 자동 진행과 필요한 승인
+## 시작 범위와 승인
 
-사용자의 루프 시작 지시는 대상 이슈 전체를 끝내는 데 필요한 정상 작업을 승인한다.
+사용자의 loop 시작 요청은 구현, local commit, review 수정, push, PR 생성·갱신, HITL comment 작성을 승인한다. **각 PR merge는 HITL comment를 본 사용자의 별도 승인이 필요하다.**
 
-| 별도 승인 없이 계속할 작업 | 규칙 |
+| 사용자 결정이 필요한 경우 | 처리 |
 |---|---|
-| 구현과 수정 | 리뷰 finding, 테스트 실패, CI 실패, 충돌을 고치고 다시 검증한다. |
-| Git/GitHub | branch, commit, push, PR 생성·수정, merge queue 등록, merged 확인, branch 정리, issue comment·close까지 진행한다. |
-| 판단과 재시도 | 저장소 규칙, 이슈·스펙, 테스트 증거를 기준으로 가장 작은 안전한 해법을 택한다. 새 서브에이전트나 다른 접근으로 계속 시도한다. |
+| 대상 issue를 찾을 수 없음 | 번호, label, milestone 중 필요한 값만 요청 |
+| HITL comment 작성 완료 | comment URL을 보여주고 merge 승인까지 대기 |
+| 인증·권한·필수 secret·도구가 없음 | 확인한 증거와 필요한 조치를 보고 |
+| 파괴 작업만 남음 | 대상, 영향, 복구법을 알리고 승인 전 중단 |
+| issue 밖의 제품 결정이 필요함 | 가능한 범위까지 끝낸 뒤 선택 요청 |
 
-base 브랜치, 심각한 finding, 일반 merge, 충돌 해결, 재시도 횟수만을 이유로 사람 승인을 요청하지 않는다. 진행 상황은 알릴 수 있지만 답을 기다리는 승인 게이트로 만들지 않는다.
+force push, `reset --hard`, 사용자 변경 폐기, 강제 worktree 삭제는 자동 승인 범위가 아니다.
 
-오케스트레이터가 증거를 확인한 결과 사람 승인이나 선택이 정말 필요하면 즉시 묻고 답을 기다린다. 질문에는 필요한 이유, 실행할 작업, 영향 범위, 안전한 대안을 짧게 담는다.
+## 0. 대상 확정
 
-| 사람에게 물어야 하는 경우 | 처리 |
+GitHub 조사 에이전트가 인증, 저장소, default branch, issue 본문·댓글·상태를 확인한다.
+
+| 항목 | 규칙 |
 |---|---|
-| 대상 이슈를 맥락과 인자에서 찾을 수 없음 | 한 번만 대상 번호·label·milestone을 요청한다. |
-| 인증·권한·필수 secret·필수 도구가 없고 안전한 대안도 없음 | 확인한 증거와 필요한 외부 조치를 설명하고 요청한다. |
-| 안전한 대안을 모두 소진했고 force push, `reset --hard`, 사용자 변경 폐기 등 파괴 작업만 남음 | 정확한 대상, 영향, 복구 방법을 설명하고 승인을 요청한다. 승인 전에는 실행하지 않는다. |
-| 이슈 범위를 벗어난 제품 결정이나 외부 시스템 변경이 꼭 필요함 | 가능한 범위까지 끝낸 뒤 선택지와 차이를 설명하고 결정을 요청한다. |
-| 도구, 저장소 규칙, branch protection이 명시적 사람 승인을 요구함 | 우회하지 않고 필요한 승인을 요청한다. |
+| 대상 | 사용자가 준 번호, label, milestone의 OPEN issue |
+| 순서 | 번호 오름차순, 명시된 의존성이 있으면 선행 issue 우선 |
+| base | 사용자 지정값, 없으면 GitHub default branch |
+| 작업 공간 | 최신 base의 clean worktree와 `codex/` branch |
 
-승인이 필요할지 애매하면 먼저 읽기 전용 조사와 안전한 대안을 끝까지 수행한다. 그래도 승인 없이는 진행할 수 없을 때만 묻는다. 승인을 받으면 즉시 루프를 재개한다. 거절받으면 그 작업을 실행하지 않고 가능한 대안을 찾는다.
+오케스트레이터는 issue별 상태, PR URL, HITL comment URL을 기록한다.
 
-## 0단계: 대상과 실행 상태 확정
+## 이슈별 loop
 
-GitHub 조사 서브에이전트를 보내 다음을 확인한다.
+### 1. local 구현과 첫 commit
 
-| 항목 | 결정 규칙 |
-|---|---|
-| 이슈 집합 | 인자의 번호, label, milestone을 쓴다. 1개면 루프를 1회 실행한다. |
-| 저장소 | 현재 저장소와 issue URL·맥락에서 찾는다. |
-| base 브랜치 | 사용자가 지정했으면 그 값을 쓴다. 아니면 GitHub 저장소의 default branch를 쓴다. 묻지 않는다. |
-| 처리 순서 | OPEN 이슈를 번호 오름차순으로 정렬하되, 본문에 의존성이 있으면 선행 이슈를 먼저 둔다. |
-| 작업 공간 | 사용자 변경을 건드리지 않는다. 기존 작업과 충돌하면 clean worktree를 만들어 격리한다. |
+구현 에이전트가 issue와 저장소 규칙에 맞는 최소 변경을 만든다. 관련 test, typecheck, lint를 실행한다.
 
-조사 서브에이전트는 `gh auth status`, 저장소 정보, 이슈 본문·댓글·상태, base 상태를 확인한다. 오케스트레이터는 이슈별 상태표를 유지한다.
+GitHub 에이전트가 issue 범위 파일만 stage하고 첫 local commit을 만든다. 아직 push하지 않는다.
 
-## 이슈별 루프
-
-### 1. 준비
-
-GitHub 서브에이전트가 base를 `--ff-only`로 최신화하고 작업 공간이 깨끗한지 확인한다. ff-only가 실패하면 원인을 조사하고 안전하게 해결한다. 사용자 변경을 stash, commit, 삭제하지 않는다.
-
-### 2. 구현
-
-구현 서브에이전트에 이슈 본문, 연결된 스펙, base, 완료 조건, 관련 저장소 규칙을 준다.
-
-서브에이전트는 base 위에서 uncommitted 상태로 가장 작은 범위를 구현한다. 필요한 테스트를 함께 만들고 관련 test·typecheck·lint를 실행한다. 오케스트레이터에 변경 파일, 핵심 판단, 실행 명령, 결과를 보고한다.
-
-### 3. PR 생성
-
-GitHub 서브에이전트가 `github-commit-to-pr` 스킬을 사용한다. 오케스트레이터는 repo, base, 이슈 번호, 허용 파일을 명시해 하위 스킬의 질문을 막는다.
-
-PR 본문에는 `Issues #<번호>`를 넣는다. 서브에이전트는 branch, commit SHA, PR 번호와 URL을 보고한다.
-
-### 4. Spec/Standards 리뷰
-
-새 리뷰 서브에이전트가 mattpocock `code-review` 스킬을 사용한다.
-
-```text
-/mattpocock-skills:code-review <base브랜치> — spec: issue #<번호>
+```bash
+git status --short
+git add <issue 범위 파일>
+git commit -m "<type>: <간결한 영어 요약>"
+git status --short
+git rev-parse HEAD
 ```
 
-fixed point는 base 브랜치다. 리뷰는 스펙 누락, scope creep, 저장소 표준 위반을 찾는다. mattpocock skill이 없으면 안전한 대안을 먼저 찾는다. 설치나 외부 선택 없이는 같은 계약을 지킬 수 없을 때 오케스트레이터가 사람에게 필요한 조치를 묻는다.
+오케스트레이터는 `base_sha`, `head_sha`, clean working tree, 변경 파일, 검증 결과를 기록한다.
 
-실질 finding이 있으면 구현 서브에이전트가 수정하고 검증한다. GitHub 서브에이전트가 같은 PR branch에 commit·push한다. 새 Spec/Standards 리뷰 서브에이전트가 최신 diff를 다시 리뷰한다. clean 판정까지 반복한다.
+### 2. local Matt Pocock review
 
-### 5. Correctness 리뷰
+새 리뷰 에이전트가 exact `base_sha...head_sha`를 `mattpocock:code-review`로 확인한다. issue 본문, acceptance criteria, 저장소 Standard를 함께 준다.
 
-Spec/Standards 리뷰와 다른 새 서브에이전트가 `github-pr-review-merge` 스킬의 correctness 관점으로 최신 PR 전체를 리뷰한다. 이 단계에서는 merge하지 않는다.
+finding이 있으면 구현 에이전트가 고치고 검증한다. GitHub 에이전트는 review 수정만 담은 local commit을 만든다.
 
-로직, edge case, 보안, 호환성, 회귀, 테스트 누락 등 실질 finding이 있으면 구현 서브에이전트가 고친다. GitHub 서브에이전트가 commit·push한 뒤 새 correctness 리뷰 서브에이전트가 다시 리뷰한다. clean 판정까지 반복한다.
+```bash
+git add <수정한 파일>
+git commit -m "fix(review): <간결한 영어 요약>"
+```
 
-### 6. CI·머지·정리
+새 commit은 clean 증거를 무효화한다. 새 리뷰 에이전트가 최신 전체 diff를 다시 본다. clean 결과 뒤 오케스트레이터가 `reviewed_base_sha`와 `reviewed_head_sha`를 기록한다.
 
-GitHub 서브에이전트가 `github-pr-review-merge` 스킬을 사용하되 아래 규칙으로 덮어쓴다.
+### 3. exact SHA push와 PR
 
-| 항목 | 이 루프의 규칙 |
+GitHub 에이전트가 `github-commit-to-pr`을 전체 실행한다.
+
+| 증거 | 필수 값 |
 |---|---|
-| 사용자 승인 | 일반 merge, 심각한 finding, 충돌, CI 실패는 묻지 않고 수정 루프로 돌린다. 명시적 사람 승인이 실제로 필요하면 오케스트레이터가 묻는다. |
-| 머지 | `gh pr merge <번호> --auto`를 쓴다. 직접 `--merge`, `--squash`, `--rebase`하지 않는다. |
-| 완료 확인 | `state=MERGED`와 `mergedAt`을 확인할 때까지 기다린다. queue 이탈이나 CI 실패는 수정 루프로 돌린다. |
-| 정리 기준 | 확정한 base 브랜치를 최신화한다. 사용자 변경이나 다른 worktree를 강제로 지우지 않는다. |
-| 이슈 종료 | merged 확인 뒤 comment를 남기고 OPEN 이슈를 close한다. |
+| Review | `reviewer=mattpocock:code-review`, `verdict=clean` |
+| SHA | `reviewed_base_sha`, `reviewed_head_sha` |
+| Local 상태 | clean working tree, validation 결과, 허용 파일 |
 
-서브에이전트는 최종 PR URL, merge SHA·시각, CI 결과, branch 정리 결과, issue CLOSED 상태를 보고한다.
+`github-commit-to-pr`은 원격 base와 현재 HEAD를 다시 확인한다. SHA가 바뀌면 push하지 않고 2단계부터 반복한다. PR 본문에는 `Issues #<번호>`와 reviewed head SHA를 넣는다.
 
-### 7. 다음 이슈
+### 4. HITL comment와 승인 대기
 
-오케스트레이터는 증거가 모두 맞을 때만 이슈를 완료로 표시한다. 그 뒤 다음 OPEN 이슈를 같은 절차로 처리한다.
+GitHub 에이전트가 `github-pr-hitl-merge`를 전체 실행한다. 이 skill은 PR 전체를 주요 사실별로 요약해 `## HITL` comment를 남긴다.
 
-문제 해결이 반복돼도 임의로 skip하거나 관성적으로 사람 지시를 기다리지 않는다. 실패 원인을 좁히고, 새 서브에이전트를 배정하거나 접근을 바꾸며 계속한다. 안전한 경로가 없고 사람 승인이나 선택이 꼭 필요할 때만 오케스트레이터가 묻는다.
+오케스트레이터는 다음 상태를 기록하고 **현재 turn을 끝낸다**.
 
-## 하위 스킬 오버라이드
+```text
+status: waiting_for_hitl_approval
+pr_url: <url>
+hitl_comment_url: <url>
+hitl_base_sha: <base_sha>
+hitl_head_sha: <head_sha>
+```
 
-이 문서가 `github-commit-to-pr`, mattpocock `code-review`, `github-pr-review-merge`와 충돌하면 이 문서가 우선한다.
+사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`를 재개한다. skill은 PR base/head SHA를 다시 확인하고, 같을 때만 `github-pr-review-merge`의 merge 단계부터 이어서 CI·merge·정리를 수행한다.
 
-| 하위 스킬의 기본 동작 | 오버라이드 |
+| 승인 뒤 상태 | 처리 |
 |---|---|
-| repo, base, 파일, PR 선택을 사용자에게 질문 | 오케스트레이터가 확인한 값을 전달하고 질문 없이 진행 |
-| 심각한 finding 수정 전 사용자 확인 | 구현 서브에이전트가 수정하고 독립 리뷰를 다시 실행 |
-| 3회 실패 뒤 사용자 지시 대기 | 원인을 재분류하고 다른 접근이나 새 서브에이전트로 계속 진행 |
-| merge·충돌·dirty tree 처리 전 사용자 확인 | 안전한 자동 해법을 먼저 소진하고, 사람 승인이 실제로 필요할 때만 오케스트레이터가 질문 |
-| merge commit 직접 실행 | merge queue용 `gh pr merge --auto` 사용 |
+| snapshot 같음 | 승인된 head SHA merge와 정리 진행 |
+| base 또는 head 변경 | 새 HITL comment 작성 후 다시 승인 대기 |
+| 사용자 수정 요청 | 구현 수정 → local 검증 → 2단계부터 반복 |
+| CI·충돌 수정에 새 commit 필요 | 승인 폐기 → 수정 → 2단계부터 반복 |
 
-하위 스킬이 없으면 같은 목적을 직접 수행할 수 있는 서브에이전트에 맡긴다. 단, mattpocock Spec/Standards 리뷰의 계약을 재현할 수 없으면 리뷰를 생략하지 않는다. 오케스트레이터가 설치나 대안 선택을 사람에게 묻는다.
+### 5. 다음 issue
+
+다음 조건이 모두 맞을 때만 현재 issue를 완료로 표시한다.
+
+| 증거 | 완료 조건 |
+|---|---|
+| Review | final head SHA의 Matt Pocock clean 결과 |
+| HITL | 같은 base/head SHA의 comment와 세션 승인 |
+| Merge | PR `state=MERGED`와 merge SHA 확인 |
+| Issue | `state=CLOSED` 확인 |
+
+그 뒤 다음 OPEN issue를 같은 순서로 처리한다.
+
+## 실패 처리
+
+명확한 finding과 CI 실패는 원인을 좁혀 수정 loop로 돌린다. 내용이 바뀌면 이전 HITL 승인을 재사용하지 않는다. 사용자 권한이나 제품 결정이 꼭 필요할 때만 오케스트레이터가 묻는다.
 
 ## 종료 보고
 
-모든 대상 이슈가 CLOSED이고 각 PR이 MERGED일 때만 목표를 완료로 판정한다. 최종 보고에는 이슈별 PR 링크, merge 상태, 리뷰에서 고친 핵심 문제, 검증 결과만 담는다.
+모든 대상 issue가 CLOSED이고 각 PR이 MERGED일 때만 완료로 판정한다. issue별 PR·HITL comment 링크, approved head SHA, merge SHA, 고친 핵심 finding, 검증 결과를 보고한다.

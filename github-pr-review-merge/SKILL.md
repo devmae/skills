@@ -1,6 +1,6 @@
 ---
 name: github-pr-review-merge
-description: "GitHub Pull Request를 전문가 수준으로 리뷰하고, 문제를 해결될 때까지 수정한 뒤, 머지하고 로컬 main 브랜치까지 정리하는 전체 워크플로우를 자동화한다. 사용자가 \"PR 리뷰해줘\", \"PR 머지해줘\", \"PR 처리해줘\", \"리뷰하고 머지까지 해줘\" 같은 말을 하거나, 머지 목적으로 PR 링크/번호를 언급하면 반드시 이 스킬을 사용한다. PR 작업이 끝난 후 머지와 로컬 브랜치 정리가 필요할 때도 이 스킬을 사용한다."
+description: "GitHub Pull Request를 리뷰·수정·merge하고 로컬·원격 branch와 linked issue를 정리한다. 사용자가 PR 리뷰·머지·처리를 요청할 때 전체 workflow를 실행하고, github-pr-hitl-merge가 같은 세션의 사용자 승인과 exact base/head SHA를 넘기면 review를 건너뛰고 merge 단계부터 재개한다."
 ---
  
 # GitHub PR 리뷰 → 머지 자동화 스킬
@@ -25,6 +25,35 @@ GitHub 서버에 접속하는 CLI 명령은 에이전트 격리 환경 밖의 ho
 ---
  
 ## 워크플로우
+
+### HITL 승인 재개 mode
+
+`github-pr-hitl-merge`가 다음 handoff를 모두 전달하면 1~3단계를 건너뛰고 4단계부터 시작한다.
+
+```text
+resume_from: merge
+hitl_approved: true
+approved_pr_number: <number>
+approved_pr_url: <url>
+approved_base_sha: <base_sha>
+approved_head_sha: <head_sha>
+hitl_comment_url: <url>
+```
+
+이 mode는 같은 Codex 세션에서 사용자가 명시적으로 승인했을 때만 쓴다. 시작 전에 PR `state`, `isDraft`, `baseRefOid`, `headRefOid`, `comments`를 다시 읽는다. `hitl_comment_url`의 comment가 아래 marker로 승인 SHA를 가리키는지도 확인한다.
+
+```text
+<!-- github-pr-hitl-merge pr=<number> base=<approved_base_sha> head=<approved_head_sha> -->
+```
+
+| 조건 | 처리 |
+|---|---|
+| OPEN, non-draft, base/head SHA 일치 | 4단계 진행 |
+| base 또는 head SHA 불일치 | `hitl_snapshot_invalidated` 반환, merge·수정 금지 |
+| HITL comment·marker 불일치 | `hitl_snapshot_invalidated` 반환, merge 금지 |
+| handoff 값 누락 | 일반 review mode로 바꾸지 말고 caller에 증거 요청 |
+
+HITL mode에서 CI 실패나 충돌 해결에 code commit 또는 base 변경이 필요하면 3단계로 돌아가지 않는다. caller가 수정, local `mattpocock:code-review`, PR 갱신, 새 HITL 승인 순서를 다시 수행하도록 반환한다.
  
 ### 1단계: PR 식별
  
@@ -98,6 +127,14 @@ gh pr view <번호> --json mergeable,mergeStateStatus
 - CI가 실패했으면 실패 로그를 확인하고 3단계 루프로 돌아간다. CI가 아직 실행 중이면 `gh pr checks <번호> --watch` 로 완료를 기다린다.
 - `mergeable` 이 `CONFLICTING` 이면 사용자에게 알리고 충돌 해결 방법을 확인받는다.
 
+HITL mode에서는 다음 규칙이 우선한다.
+
+| 상태 | 처리 |
+|---|---|
+| CI pending | 같은 snapshot의 check 완료를 기다림 |
+| CI fail | 원인을 보고하고, code/base 변경이 필요하면 `hitl_snapshot_invalidated` 반환 |
+| conflict | branch를 갱신하지 않고 `hitl_snapshot_invalidated` 반환 |
+
 **머지 방식은 merge commit으로 고정한다.** 사용자에게 방식을 묻지 않는다. 저장소가 merge commit을 허용하는지 확인한다:
  
 ```bash
@@ -108,9 +145,20 @@ gh repo view --json mergeCommitAllowed
 - 리뷰와 마지막 점검에 문제가 없으면 별도 알림이나 확인 없이 아래 명령을 실행해 merge까지 진행한다.
 - 사용자가 머지 직전 확인을 요청했다면 아래 명령을 실행하기 직전에 물어보고 답을 기다린다.
 
+일반 mode:
+
 ```bash
 gh pr merge <번호> --merge
 ```
+
+HITL mode에서는 merge 직전에 base/head SHA를 다시 대조하고 승인한 head만 merge한다.
+
+```bash
+gh pr view <번호> --json state,isDraft,baseRefOid,headRefOid,mergeable,mergeStateStatus
+gh pr merge <번호> --merge --match-head-commit <approved_head_sha>
+```
+
+base 또는 head가 달라지면 merge command를 실행하지 않는다.
  
 머지 성공 후 사용자에게 보고한다:
  

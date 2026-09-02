@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub PR HITL Merge"
+  short_description: "Summarize a PR and wait for approval"
+  default_prompt: "Use $github-pr-hitl-merge to post a human-readable HITL summary on this Pull Request, wait for my approval, then merge the approved snapshot."
