@@ -1,6 +1,6 @@
 ---
 name: issue-loop-mattpocock
-description: "오케스트레이터가 GitHub 이슈를 하나씩 구현하고 local mattpocock:code-review, exact SHA PR, 사람이 승인하는 HITL merge skill을 조합해 정리까지 끝낸다. 사용자가 issue 번호·label·milestone과 함께 이슈 루프나 순차 처리를 요청할 때 사용한다."
+description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket 문서를 먼저 독립 PR로 merge한 다음 GitHub 이슈를 하나씩 구현하고 local mattpocock:code-review, exact SHA PR, 사람이 승인하는 HITL merge skill을 조합해 정리까지 끝낸다. 사용자가 issue 번호·label·milestone과 함께 이슈 루프나 순차 처리를 요청할 때 사용한다."
 ---
 
 ## 먼저 서브에이전트 모델 확인
@@ -16,7 +16,7 @@ description: "오케스트레이터가 GitHub 이슈를 하나씩 구현하고 l
 대상 issue를 하나씩 끝낸다. PR마다 HITL comment를 남기고 사용자가 같은 세션에서 승인할 때까지 merge를 멈춘다.
 
 ```text
-issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA push·PR → HITL comment → 사용자 승인 → merge·정리 → 다음 issue
+문서 baseline PR·merge → issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA push·PR → HITL comment → 사용자 승인 → merge·정리 → 다음 issue
 ```
 
 ## 조합하는 skill
@@ -25,7 +25,8 @@ issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA p
 |---|---|
 | `mattpocock:code-review` | local commit 전체를 저장소 Standard와 issue spec 기준으로 리뷰 |
 | `github-commit-to-pr` | clean review SHA를 대조하고 push·PR 생성·갱신 |
-| `github-pr-hitl-merge` | PR 전체 요약 comment, 사용자 승인 대기, 승인된 SHA merge·정리 |
+| `github-pr-hitl-merge` | PR 전체 요약 comment와 사용자 승인 대기 |
+| `github-merge-clean` | 승인된 SHA의 CI 확인, merge, branch·issue 정리 |
 
 오케스트레이터는 하위 skill의 내부 단계를 복제하지 않는다. 입력과 증거를 넘기고 완료 결과를 받는다.
 
@@ -53,6 +54,60 @@ issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA p
 | issue 밖의 제품 결정이 필요함 | 가능한 범위까지 끝낸 뒤 선택 요청 |
 
 force push, `reset --hard`, 사용자 변경 폐기, 강제 worktree 삭제는 자동 승인 범위가 아니다.
+
+## 사전 단계: 문서 baseline PR
+
+이 loop가 `grill-with-docs`, `to-spec`, `to-ticket` 뒤 시작되어 ADR·spec·ticket 문서가 local working tree에 남아 있으면, issue를 찾거나 구현하기 전에 문서만 독립 PR로 merge한다. 문서와 issue 구현은 같은 branch, commit, PR에 섞지 않는다.
+
+### 1. 문서 범위 확정
+
+오케스트레이터가 `git status --short`와 대화의 upstream 산출물을 대조한다. 대화에서 확인된 ADR, spec, ticket 문서만 허용 파일로 기록한다. 문서 범위를 정할 수 없으면 필요한 경로만 사용자에게 확인한다. 문서 밖의 dirty file은 stage, stash, 이동, 삭제하지 않는다.
+
+문서 밖의 dirty file이 있으면 현재 working tree에서 commit을 시도하지 않는다. 최신 base에서 clean docs worktree를 만들고, 확인한 문서 변경만 그 worktree에 복사하거나 적용한다. 원래 working tree의 파일은 지우거나 되돌리지 않는다. 이후 단계는 이 clean docs worktree에서 수행한다.
+
+문서 변경이 없으면 다음 상태를 기록하고 `0. 대상 확정`으로 간다.
+
+```text
+docs_baseline_status: skipped
+```
+
+### 2. 문서 PR 생성
+
+문서 변경이 있으면 최신 base에서 `codex/docs-baseline` branch를 사용한다. 이름이 겹치면 짧은 숫자 suffix를 붙인다. GitHub 에이전트가 `github-commit-to-pr`을 호출하고 다음을 넘긴다.
+
+| 값 | 내용 |
+|---|---|
+| 허용 파일 | 1단계에서 확정한 ADR·spec·ticket 문서만 |
+| branch | `codex/docs-baseline` 또는 suffix branch |
+| base | 사용자 지정값, 없으면 GitHub default branch |
+| spec | upstream 산출물의 목적과 문서 간 연결 |
+| commit message | `docs: add planning baseline` 등 간결한 영어 요약 |
+
+`github-commit-to-pr`은 문서 파일만 local commit하고, `mattpocock:code-review`의 clean exact SHA를 확인한 뒤 push·PR 생성 또는 갱신을 수행한다. 문서 PR 본문에는 문서 목적, 핵심 파일, local 검증, reviewed head SHA를 넣는다.
+
+### 3. 문서 HITL 승인과 merge
+
+GitHub 에이전트가 문서 PR에 `github-pr-hitl-merge`를 실행한다. 오케스트레이터는 다음 상태를 기록하고 **현재 turn을 끝낸다**. 문서 PR이 merge되기 전에는 `0. 대상 확정`과 issue 구현을 시작하지 않는다.
+
+```text
+status: waiting_for_docs_hitl_approval
+docs_pr_url: <url>
+docs_hitl_comment_url: <url>
+docs_base_sha: <base_sha>
+docs_head_sha: <head_sha>
+```
+
+사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`가 snapshot을 다시 확인한다. 같으면 `github-merge-clean`으로 handoff해 CI 확인, merge commit, local·remote docs branch 정리를 수행한다.
+
+| 승인 뒤 상태 | 처리 |
+|---|---|
+| snapshot 같음 | 문서 PR merge와 정리 진행 |
+| base 또는 head 변경 | 새 문서 HITL comment를 만들고 다시 승인 대기 |
+| 문서 수정 요청·CI 실패·충돌 | 문서 수정 → local 검증 → Matt 리뷰 → PR 갱신 → 새 HITL 승인 |
+
+### 4. issue loop 시작 조건
+
+문서 PR의 `state=MERGED`, merge SHA, local·remote docs branch 정리 상태를 확인한다. `git fetch origin <base>` 뒤 이 merge SHA를 포함한 clean base에서 issue별 worktree를 만든다. 그 뒤에만 `0. 대상 확정`으로 진행한다.
 
 ## 0. 대상 확정
 
@@ -124,7 +179,7 @@ hitl_base_sha: <base_sha>
 hitl_head_sha: <head_sha>
 ```
 
-사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`를 재개한다. skill은 PR base/head SHA를 다시 확인하고, 같을 때만 `github-pr-review-merge`의 merge 단계부터 이어서 CI·merge·정리를 수행한다.
+사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`를 재개한다. skill은 PR base/head SHA를 다시 확인하고, 같을 때만 `github-merge-clean`으로 handoff해 CI·merge·정리를 수행한다.
 
 | 승인 뒤 상태 | 처리 |
 |---|---|
