@@ -36,10 +36,12 @@ GitHub 서버에 접속하는 CLI 명령은 에이전트 격리 환경 밖의 ho
 PR을 식별하면 메타데이터를 수집한다:
  
 ```bash
-gh pr view <번호> --json number,title,body,baseRefName,headRefName,state,mergeable,url
+gh pr view <번호> --json number,title,body,baseRefName,baseRefOid,headRefName,headRefOid,state,isDraft,mergeable,url
 ```
  
 `state` 가 `OPEN` 이 아니면 사용자에게 알리고 중단한다.
+
+리뷰 시작 전에 `baseRefOid`를 `reviewed_base_sha`, `headRefOid`를 `reviewed_head_sha`로 기록한다. 리뷰가 끝난 뒤 PR을 다시 읽어 두 SHA가 같을 때만 clean 결과를 쓴다. 하나라도 바뀌면 그 결과를 버리고 최신 snapshot 전체를 다시 리뷰한다.
  
 ### 2단계: 전문가 리뷰
  
@@ -88,9 +90,21 @@ git push origin <headRefName>
 5. 문제가 모두 해소될 때까지 반복한다. 3회 반복해도 해소되지 않으면 상황을 정리해 사용자에게 보고하고 지시를 기다린다.
 ### 4단계: `github-merge-clean` handoff
 
-문제가 없으면 `github-merge-clean`을 호출한다. PR 번호·URL, base/head branch와 review 완료 사실을 넘긴다. 이 스킬이 CI 확인, merge commit, local·remote branch 정리, linked issue comment·close를 수행한다.
+문제가 없고 리뷰 전·후 SHA가 같으면 다음 handoff를 `github-merge-clean`에 넘긴다.
 
-`github-merge-clean`이 CI 실패나 충돌로 `merge_blocked`를 반환하면 원인을 확인해 3단계 수정 loop로 돌아간다. 새 commit 뒤에는 다시 리뷰하고, clean 결과에서 handoff를 다시 한다.
+```text
+resume_from: merge
+review_completed: true
+reviewed_pr_number: <number>
+reviewed_pr_url: <url>
+reviewed_base_sha: <reviewed_base_sha>
+reviewed_head_sha: <reviewed_head_sha>
+merge_confirmation_required: <true|false>
+```
+
+`merge_confirmation_required`는 사용자가 merge 직전 확인을 요청했을 때만 `true`다. `github-merge-clean`이 review snapshot의 CI 확인, merge commit, local·remote branch 정리, linked issue comment·close를 수행한다.
+
+`github-merge-clean`이 SHA 불일치로 `review_snapshot_invalidated`를 반환하면 최신 PR 전체를 다시 리뷰한다. CI 실패나 충돌로 `merge_blocked`를 반환하면 원인을 확인해 3단계 수정 loop로 돌아간다. 새 commit 뒤에는 다시 리뷰하고, clean 결과에서 handoff를 다시 한다.
 ---
  
 ## 주의사항
