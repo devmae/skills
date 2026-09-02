@@ -8,10 +8,11 @@
 | `game-audio-organizer` | 게임 오디오를 실제 음원 기준으로 분석해 MUSIC, VOICE, SFX 폴더로 분류합니다. |
 | `github-commit-to-pr` | 로컬 commit을 Matt Pocock review한 뒤 exact SHA로 Pull Request를 생성·갱신합니다. |
 | `github-issue-to-pr` | GitHub 이슈를 구현하고 Matt Pocock review를 거쳐 Pull Request를 생성합니다. |
-| `github-pr-hitl-merge` | Pull Request 전체를 HITL comment로 요약하고 사용자 승인 뒤 merge합니다. |
-| `github-pr-review-merge` | Pull Request를 리뷰·수정·merge하고 관련 브랜치를 정리합니다. |
+| `github-pr-hitl-merge` | Pull Request 전체를 HITL comment로 요약한 뒤 같은 SHA를 merge합니다. |
+| `github-merge-clean` | 검증된 Pull Request를 merge하고 branch·linked issue를 정리합니다. |
+| `github-pr-review-merge` | Pull Request를 리뷰·수정한 뒤 `github-merge-clean`으로 넘깁니다. |
 | `harness-builder` | 코드베이스에 문서, 진행 추적, 검증 절차를 갖춘 Agent harness를 만듭니다. |
-| `issue-loop-mattpocock` | GitHub 이슈를 구현하고 Matt Pocock review, HITL 승인, merge까지 순차 처리합니다. |
+| `issue-loop-mattpocock` | GitHub 이슈를 구현하고 Matt Pocock review, HITL 기록, merge까지 순차 처리합니다. |
 | `project-discovery-architecture` | 초기 아이디어를 제품 목표, 기술 결정, 단계별 개발 계획으로 구체화합니다. |
 | `vat-filing` | 국내 1인 모바일 게임 사업자의 부가가치세 자료 수집, 계산, 신고 검증을 돕습니다. |
 
