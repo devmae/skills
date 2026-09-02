@@ -1,6 +1,6 @@
 ---
 name: issue-loop-mattpocock
-description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket 문서를 먼저 독립 PR로 merge한 다음 GitHub 이슈를 하나씩 구현하고 local mattpocock:code-review, exact SHA PR, 사람이 승인하는 HITL merge skill을 조합해 정리까지 끝낸다. 사용자가 issue 번호·label·milestone과 함께 이슈 루프나 순차 처리를 요청할 때 사용한다."
+description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket 문서를 먼저 독립 PR로 merge한 다음 GitHub 이슈를 하나씩 구현하고 local mattpocock:code-review, exact SHA PR, HITL 기록과 merge skill을 조합해 정리까지 끝낸다. 사용자가 issue 번호·label·milestone과 함께 이슈 루프나 순차 처리를 요청할 때 사용한다."
 ---
 
 ## 먼저 서브에이전트 모델 확인
@@ -13,10 +13,10 @@ description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket �
 
 # Issue Loop — Matt Review + HITL Merge
 
-대상 issue를 하나씩 끝낸다. PR마다 HITL comment를 남기고 사용자가 같은 세션에서 승인할 때까지 merge를 멈춘다.
+대상 issue를 하나씩 끝낸다. PR마다 HITL comment를 남긴 뒤 같은 snapshot의 merge·정리까지 바로 진행한다.
 
 ```text
-문서 baseline PR·merge → issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA push·PR → HITL comment → 사용자 승인 → merge·정리 → 다음 issue
+문서 baseline PR·merge → issue 확인 → local 구현·commit → mattpocock:code-review → exact SHA push·PR → HITL comment → merge·정리 → 다음 issue
 ```
 
 ## 조합하는 skill
@@ -25,8 +25,8 @@ description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket �
 |---|---|
 | `mattpocock:code-review` | local commit 전체를 저장소 Standard와 issue spec 기준으로 리뷰 |
 | `github-commit-to-pr` | clean review SHA를 대조하고 push·PR 생성·갱신 |
-| `github-pr-hitl-merge` | PR 전체 요약 comment와 사용자 승인 대기 |
-| `github-merge-clean` | 승인된 SHA의 CI 확인, merge, branch·issue 정리 |
+| `github-pr-hitl-merge` | PR 전체 요약 HITL comment와 snapshot 검증 |
+| `github-merge-clean` | 기록된 SHA의 CI 확인, merge, branch·issue 정리 |
 
 오케스트레이터는 하위 skill의 내부 단계를 복제하지 않는다. 입력과 증거를 넘기고 완료 결과를 받는다.
 
@@ -34,21 +34,21 @@ description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket �
 
 | 역할 | 책임 |
 |---|---|
-| 오케스트레이터 | issue 순서, 단계 상태, exact SHA, HITL 승인 상태 관리 |
+| 오케스트레이터 | issue 순서, 단계 상태, exact SHA, HITL 기록 상태 관리 |
 | 구현 에이전트 | issue 구현, review·CI·사용자 요청 수정, local 검증 |
 | 리뷰 에이전트 | `mattpocock:code-review`로 local 전체 diff 리뷰 |
 | GitHub 에이전트 | branch·commit, PR 생성·갱신, HITL·merge skill 실행과 증거 수집 |
 
 구현자는 자기 변경을 clean으로 승인하지 않는다. 리뷰는 새 에이전트가 맡는다. 같은 저장소를 쓰는 에이전트는 동시에 파일을 바꾸지 않는다.
 
-## 시작 범위와 승인
+## 시작 범위와 중단 조건
 
-사용자의 loop 시작 요청은 구현, local commit, review 수정, push, PR 생성·갱신, HITL comment 작성을 승인한다. **각 PR merge는 HITL comment를 본 사용자의 별도 승인이 필요하다.**
+사용자의 loop 시작 요청은 구현, local commit, review 수정, push, PR 생성·갱신, HITL comment, `github-merge-clean`의 merge·정리를 승인한다. HITL comment는 기록이며 별도 사용자 승인을 기다리지 않는다.
 
 | 사용자 결정이 필요한 경우 | 처리 |
 |---|---|
 | 대상 issue를 찾을 수 없음 | 번호, label, milestone 중 필요한 값만 요청 |
-| HITL comment 작성 완료 | comment URL을 보여주고 merge 승인까지 대기 |
+| HITL comment 작성 완료 | 같은 snapshot을 확인하고 `github-merge-clean`으로 바로 handoff |
 | 인증·권한·필수 secret·도구가 없음 | 확인한 증거와 필요한 조치를 보고 |
 | 파괴 작업만 남음 | 대상, 영향, 복구법을 알리고 승인 전 중단 |
 | issue 밖의 제품 결정이 필요함 | 가능한 범위까지 끝낸 뒤 선택 요청 |
@@ -85,25 +85,25 @@ docs_baseline_status: skipped
 
 `github-commit-to-pr`은 문서 파일만 local commit하고, `mattpocock:code-review`의 clean exact SHA를 확인한 뒤 push·PR 생성 또는 갱신을 수행한다. 문서 PR 본문에는 문서 목적, 핵심 파일, local 검증, reviewed head SHA를 넣는다.
 
-### 3. 문서 HITL 승인과 merge
+### 3. 문서 HITL 기록과 merge
 
-GitHub 에이전트가 문서 PR에 `github-pr-hitl-merge`를 실행한다. 오케스트레이터는 다음 상태를 기록하고 **현재 turn을 끝낸다**. 문서 PR이 merge되기 전에는 `0. 대상 확정`과 issue 구현을 시작하지 않는다.
+GitHub 에이전트가 문서 PR에 `github-pr-hitl-merge`를 실행한다. 이 skill은 HITL comment를 기록하고 같은 snapshot을 확인한 뒤 `github-merge-clean`으로 바로 handoff한다. 문서 PR이 merge되기 전에는 `0. 대상 확정`과 issue 구현을 시작하지 않는다.
 
 ```text
-status: waiting_for_docs_hitl_approval
+status: docs_hitl_recorded
 docs_pr_url: <url>
 docs_hitl_comment_url: <url>
 docs_base_sha: <base_sha>
 docs_head_sha: <head_sha>
 ```
 
-사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`가 snapshot을 다시 확인한다. 같으면 `github-merge-clean`으로 handoff해 CI 확인, merge commit, local·remote docs branch 정리를 수행한다.
+`github-pr-hitl-merge`가 snapshot을 다시 확인한다. 같으면 `github-merge-clean`이 CI 확인, merge commit, local·remote docs branch 정리를 수행한다.
 
-| 승인 뒤 상태 | 처리 |
+| 기록 뒤 상태 | 처리 |
 |---|---|
 | snapshot 같음 | 문서 PR merge와 정리 진행 |
-| base 또는 head 변경 | 새 문서 HITL comment를 만들고 다시 승인 대기 |
-| 문서 수정 요청·CI 실패·충돌 | 문서 수정 → local 검증 → Matt 리뷰 → PR 갱신 → 새 HITL 승인 |
+| base 또는 head 변경 | 새 문서 HITL comment를 기록하고 다시 handoff |
+| 문서 수정 요청·CI 실패·충돌 | 문서 수정 → local 검증 → Matt 리뷰 → PR 갱신 → 새 HITL 기록 |
 
 ### 4. issue loop 시작 조건
 
@@ -165,28 +165,28 @@ GitHub 에이전트가 `github-commit-to-pr`을 전체 실행한다.
 
 `github-commit-to-pr`은 원격 base와 현재 HEAD를 다시 확인한다. SHA가 바뀌면 push하지 않고 2단계부터 반복한다. PR 본문에는 `Issues #<번호>`와 reviewed head SHA를 넣는다.
 
-### 4. HITL comment와 승인 대기
+### 4. HITL comment 기록과 merge
 
-GitHub 에이전트가 `github-pr-hitl-merge`를 전체 실행한다. 이 skill은 PR 전체를 주요 사실별로 요약해 `## HITL` comment를 남긴다.
+GitHub 에이전트가 `github-pr-hitl-merge`를 전체 실행한다. 이 skill은 PR 전체를 주요 사실별로 요약해 `## HITL` comment를 남기고 같은 snapshot을 확인한 뒤 `github-merge-clean`으로 handoff한다.
 
-오케스트레이터는 다음 상태를 기록하고 **현재 turn을 끝낸다**.
+오케스트레이터는 다음 상태를 기록한 뒤 `github-merge-clean` 결과를 기다린다.
 
 ```text
-status: waiting_for_hitl_approval
+status: hitl_recorded
 pr_url: <url>
 hitl_comment_url: <url>
 hitl_base_sha: <base_sha>
 hitl_head_sha: <head_sha>
 ```
 
-사용자가 같은 세션에서 승인하면 `github-pr-hitl-merge`를 재개한다. skill은 PR base/head SHA를 다시 확인하고, 같을 때만 `github-merge-clean`으로 handoff해 CI·merge·정리를 수행한다.
+`github-merge-clean`은 기록한 PR base/head SHA를 다시 확인하고, 같을 때만 CI·merge·정리를 수행한다.
 
-| 승인 뒤 상태 | 처리 |
+| 기록 뒤 상태 | 처리 |
 |---|---|
-| snapshot 같음 | 승인된 head SHA merge와 정리 진행 |
-| base 또는 head 변경 | 새 HITL comment 작성 후 다시 승인 대기 |
+| snapshot 같음 | 기록된 head SHA merge와 정리 진행 |
+| base 또는 head 변경 | 새 HITL comment 기록 후 다시 handoff |
 | 사용자 수정 요청 | 구현 수정 → local 검증 → 2단계부터 반복 |
-| CI·충돌 수정에 새 commit 필요 | 승인 폐기 → 수정 → 2단계부터 반복 |
+| CI·충돌 수정에 새 commit 필요 | HITL 기록 폐기 → 수정 → 2단계부터 반복 |
 
 ### 5. 다음 issue
 
@@ -195,7 +195,7 @@ hitl_head_sha: <head_sha>
 | 증거 | 완료 조건 |
 |---|---|
 | Review | final head SHA의 Matt Pocock clean 결과 |
-| HITL | 같은 base/head SHA의 comment와 세션 승인 |
+| HITL | 같은 base/head SHA의 comment 기록 |
 | Merge | PR `state=MERGED`와 merge SHA 확인 |
 | Issue | `state=CLOSED` 확인 |
 
@@ -203,8 +203,8 @@ hitl_head_sha: <head_sha>
 
 ## 실패 처리
 
-명확한 finding과 CI 실패는 원인을 좁혀 수정 loop로 돌린다. 내용이 바뀌면 이전 HITL 승인을 재사용하지 않는다. 사용자 권한이나 제품 결정이 꼭 필요할 때만 오케스트레이터가 묻는다.
+명확한 finding과 CI 실패는 원인을 좁혀 수정 loop로 돌린다. 내용이 바뀌면 이전 HITL 기록을 재사용하지 않는다. 사용자 권한이나 제품 결정이 꼭 필요할 때만 오케스트레이터가 묻는다.
 
 ## 종료 보고
 
-모든 대상 issue가 CLOSED이고 각 PR이 MERGED일 때만 완료로 판정한다. issue별 PR·HITL comment 링크, approved head SHA, merge SHA, 고친 핵심 finding, 검증 결과를 보고한다.
+모든 대상 issue가 CLOSED이고 각 PR이 MERGED일 때만 완료로 판정한다. issue별 PR·HITL comment 링크, recorded head SHA, merge SHA, 고친 핵심 finding, 검증 결과를 보고한다.
