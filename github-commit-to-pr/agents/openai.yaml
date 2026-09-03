@@ -1,4 +1,4 @@
 interface:
   display_name: "GitHub Commit to PR"
-  short_description: "Push current changes and create a PR"
-  default_prompt: "Use $github-commit-to-pr to push the current changes to a new branch and create a concise Pull Request."
+  short_description: "Run Matt review, then create a PR"
+  default_prompt: "Use $github-commit-to-pr to run mattpocock:code-review, push the exact reviewed SHA, and create a concise Pull Request."
