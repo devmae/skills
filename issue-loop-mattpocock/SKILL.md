@@ -59,6 +59,8 @@ description: "grill-with-docs, to-spec, to-ticket 뒤 남은 ADR·spec·ticket �
 
 force push, `reset --hard`, 사용자 변경 폐기, 강제 worktree 삭제는 자동 승인 범위가 아니다.
 
+기본 작업 공간은 현재 폴더다. 사용자가 별도로 지시하지 않으면 worktree를 만들거나 전환하지 않는다.
+
 ## 사전 단계: 문서 baseline PR
 
 이 loop가 `grill-with-docs`, `to-spec`, `to-ticket` 뒤 시작되어 ADR·spec·ticket 문서가 local working tree에 남아 있으면, issue를 찾거나 구현하기 전에 문서만 독립 PR로 merge한다. 문서와 issue 구현은 같은 branch, commit, PR에 섞지 않는다.
@@ -67,7 +69,7 @@ force push, `reset --hard`, 사용자 변경 폐기, 강제 worktree 삭제는 �
 
 오케스트레이터가 `git status --short`와 대화의 upstream 산출물을 대조한다. 대화에서 확인된 ADR, spec, ticket 문서만 허용 파일로 기록한다. 문서 범위를 정할 수 없으면 필요한 경로만 사용자에게 확인한다. 문서 밖의 dirty file은 stage, stash, 이동, 삭제하지 않는다.
 
-문서 밖의 dirty file이 있으면 현재 working tree에서 commit을 시도하지 않는다. 최신 base에서 clean docs worktree를 만들고, 확인한 문서 변경만 그 worktree에 복사하거나 적용한다. 원래 working tree의 파일은 지우거나 되돌리지 않는다. 이후 단계는 이 clean docs worktree에서 수행한다.
+문서 밖의 dirty file이 있어도 현재 폴더에서 작업한다. 확인한 문서만 stage·commit하고, 문서 밖 파일은 지우거나 되돌리지 않는다. worktree는 사용자가 별도로 지시할 때만 만든다.
 
 문서 변경이 없으면 다음 상태를 기록하고 `0. 대상 확정`으로 간다.
 
@@ -111,7 +113,7 @@ docs_head_sha: <head_sha>
 
 ### 4. issue loop 시작 조건
 
-문서 PR의 `state=MERGED`, merge SHA, local·remote docs branch 정리 상태를 확인한다. `git fetch origin <base>` 뒤 이 merge SHA를 포함한 clean base에서 issue별 worktree를 만든다. 그 뒤에만 `0. 대상 확정`으로 진행한다.
+문서 PR의 `state=MERGED`, merge SHA, local·remote docs branch 정리 상태를 확인한다. `git fetch origin <base>` 뒤 현재 폴더의 base가 이 merge SHA를 포함하는지 확인한다. 그 뒤에만 `0. 대상 확정`으로 진행한다. worktree는 사용자가 별도로 지시할 때만 만든다.
 
 ## 0. 대상 확정
 
@@ -122,7 +124,7 @@ GitHub 조사 에이전트가 인증, 저장소, default branch, issue 본문·�
 | 대상 | 사용자가 준 번호, label, milestone의 OPEN issue |
 | 순서 | 번호 오름차순, 명시된 의존성이 있으면 선행 issue 우선 |
 | base | 사용자 지정값, 없으면 GitHub default branch |
-| 작업 공간 | 최신 base의 clean worktree와 `codex/` branch |
+| 작업 공간 | 현재 폴더의 최신 base와 `codex/` branch. 별도 지시가 있을 때만 worktree 사용 |
 
 오케스트레이터는 issue별 상태, PR URL, HITL comment URL을 기록한다.
 
