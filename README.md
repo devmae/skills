@@ -5,6 +5,7 @@
 | 스킬 | 소개 |
 | --- | --- |
 | `cognee-setup` | Claude Code, Codex, OpenCode, Antigravity와 MCP client의 Cognee memory를 점검하고 설정합니다. |
+| `explain-simply` | 직전 설명·리뷰 결과·작업 내용을 쉬운 말로 다시 설명합니다. |
 | `game-audio-organizer` | 게임 오디오를 실제 음원 기준으로 분석해 MUSIC, VOICE, SFX 폴더로 분류합니다. |
 | `github-commit-to-pr` | 로컬 commit을 Matt Pocock review한 뒤 exact SHA로 Pull Request를 생성·갱신합니다. |
 | `github-issue-to-pr` | GitHub 이슈를 구현하고 Matt Pocock review를 거쳐 Pull Request를 생성합니다. |
